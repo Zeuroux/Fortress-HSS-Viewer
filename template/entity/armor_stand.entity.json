@@ -1,0 +1,32 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "minecraft:armor_stand",
+      "min_engine_version": "1.8.0",
+      "materials": { "bounding_boxes": "entity_alphatest" },
+      "textures":  { "bounding_boxes": "textures/bounding_box" },
+      "geometry": {
+        "default":        "geometry.armor_stand.larger_render",
+        "bounding_boxes": "geometry.bounding_boxes"
+      },
+      "scripts": {
+        "pre_animation": [
+          "v.bounding_box_show = query.is_item_name_any('slot.weapon.mainhand', 0, 'minecraft:blaze_rod');",
+          "v.bounding_box_yaw = 0 - query.body_y_rotation;"
+        ],
+        "animate": [
+          "controller.pose",
+          "controller.wiggling",
+          { "bounding_boxes": "v.bounding_box_show" }
+        ],
+        "should_update_bones_and_effects_offscreen": true
+      },
+      "animations": { "bounding_boxes": "animation.bounding_boxes" },
+      "render_controllers": [
+        "controller.render.armor_stand",
+        { "controller.render.bounding_boxes": "v.bounding_box_show" }
+      ]
+    }
+  }
+}

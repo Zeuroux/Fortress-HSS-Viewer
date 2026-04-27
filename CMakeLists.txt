@@ -51,7 +51,7 @@ add_custom_command(TARGET fortress POST_BUILD
         $<TARGET_FILE:fortress>
         ${CMAKE_SOURCE_DIR}/site/
 
-    COMMAND ${CMAKE_COMMAND} -E copy
-        $<TARGET_FILE_DIR:fortress>/fortress.wasm
-        ${CMAKE_SOURCE_DIR}/site/
+    # COMMAND ${CMAKE_COMMAND} -E copy
+    #     $<TARGET_FILE_DIR:fortress>/fortress.wasm
+    #     ${CMAKE_SOURCE_DIR}/site/
 )

@@ -125,10 +125,6 @@ function generateManifest(name, description) {
   return JSON.stringify(manifest, null, 2);
 }
 
-function getCssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
 function getIconBounds(armorStand, boxes) {
   let xMin = armorStand.x;
   let xMax = armorStand.x;
@@ -145,95 +141,23 @@ function getIconBounds(armorStand, boxes) {
   return { xMin, xMax, zMin, zMax };
 }
 
-async function generatePackIcon(armorStand) {
-  const iconSize = 512;
-  const paddingBlocks = 12;
-  const iconCanvas = document.createElement('canvas');
-  iconCanvas.width = iconCanvas.height = iconSize;
-  const iconCtx = iconCanvas.getContext('2d');
+async function generatePackIcon(armorStand, canvas) {
+  const iconSize = 720;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const ap = worldToCanvas(armorStand.x, armorStand.z);
 
-  iconCtx.fillStyle = getCssVar('--canvas-bg');
-  iconCtx.fillRect(0, 0, iconSize, iconSize);
+  const srcX = ap.cx * dpr - (iconSize / 2);
+  const srcY = ap.cy * dpr - (iconSize / 2);
 
-  const bounds = getIconBounds(armorStand, hssBoxes);
-  const worldWidth = Math.max(1, bounds.xMax - bounds.xMin + paddingBlocks * 2);
-  const worldHeight = Math.max(1, bounds.zMax - bounds.zMin + paddingBlocks * 2);
-  const iconScale = (iconSize * 0.78) / Math.max(worldWidth, worldHeight);
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = iconSize;
+  cropCanvas.height = iconSize;
+  const cropCtx = cropCanvas.getContext('2d');
 
-  const worldToIcon = (wx, wz) => ({
-    x: iconSize / 2 + (wx - armorStand.x) * iconScale,
-    y: iconSize / 2 + (wz - armorStand.z) * iconScale
-  });
-
-  const CHUNK = 16;
-  const OFF = -0.5;
-  const halfWorld = Math.max(worldWidth, worldHeight) / 2;
-  const leftWorld = armorStand.x - halfWorld;
-  const topWorld = armorStand.z - halfWorld;
-  const rightWorld = armorStand.x + halfWorld;
-  const bottomWorld = armorStand.z + halfWorld;
-
-  const gx0 = Math.floor((leftWorld - OFF) / CHUNK) * CHUNK + OFF;
-  const gz0 = Math.floor((topWorld - OFF) / CHUNK) * CHUNK + OFF;
-
-  for (let gx = gx0; gx <= rightWorld; gx += CHUNK) {
-    const { x } = worldToIcon(gx, 0);
-    const isReg = (gx - OFF) % 256 === 0;
-    iconCtx.strokeStyle = getCssVar(isReg ? '--grid-region' : '--grid-chunk');
-    iconCtx.lineWidth = Math.max(1, Math.min(2, iconScale * 0.08));
-    iconCtx.beginPath();
-    iconCtx.moveTo(x, 0);
-    iconCtx.lineTo(x, iconSize);
-    iconCtx.stroke();
-  }
-
-  for (let gz = gz0; gz <= bottomWorld; gz += CHUNK) {
-    const { y } = worldToIcon(0, gz);
-    const isReg = (gz - OFF) % 256 === 0;
-    iconCtx.strokeStyle = getCssVar(isReg ? '--grid-region' : '--grid-chunk');
-    iconCtx.lineWidth = Math.max(1, Math.min(2, iconScale * 0.08));
-    iconCtx.beginPath();
-    iconCtx.moveTo(0, y);
-    iconCtx.lineTo(iconSize, y);
-    iconCtx.stroke();
-  }
-
-  for (const b of autoBoxes) {
-    const origin = worldToIcon(b.px - 0.5 - b.sx / 2, b.pz - 0.5 - b.sz / 2);
-    iconCtx.fillStyle = 'rgba(220, 50, 50, 0.3)';
-    iconCtx.strokeStyle = '#dc3232';
-    iconCtx.lineWidth = 1;
-    iconCtx.fillRect(origin.x, origin.y, b.sx * iconScale, b.sz * iconScale);
-    iconCtx.strokeRect(origin.x, origin.y, b.sx * iconScale, b.sz * iconScale);
-  }
-
-  for (const b of hssBoxes) {
-    const origin = worldToIcon(b.px - b.sx / 2, b.pz - b.sz / 2);
-    iconCtx.fillStyle = 'rgba(58,107,138,0.35)';
-    iconCtx.strokeStyle = '#3a6b8a';
-    iconCtx.lineWidth = 1.25;
-    iconCtx.fillRect(origin.x, origin.y, b.sx * iconScale, b.sz * iconScale);
-    iconCtx.strokeRect(origin.x, origin.y, b.sx * iconScale, b.sz * iconScale);
-  }
-
-  const centerX = iconSize / 2;
-  const centerY = iconSize / 2;
-  const crossRadius = Math.max(6, iconSize * 0.015);
-  iconCtx.strokeStyle = '#e05050';
-  iconCtx.lineWidth = 3;
-  iconCtx.beginPath();
-  iconCtx.moveTo(centerX - crossRadius - 2, centerY);
-  iconCtx.lineTo(centerX + crossRadius + 2, centerY);
-  iconCtx.moveTo(centerX, centerY - crossRadius - 2);
-  iconCtx.lineTo(centerX, centerY + crossRadius + 2);
-  iconCtx.stroke();
-  iconCtx.fillStyle = '#e05050';
-  iconCtx.beginPath();
-  iconCtx.arc(centerX, centerY, Math.max(4, iconSize * 0.008), 0, Math.PI * 2);
-  iconCtx.fill();
+  cropCtx.drawImage(canvas, srcX, srcY, iconSize, iconSize, 0, 0, iconSize, iconSize);
 
   return await new Promise((resolve, reject) => {
-    iconCanvas.toBlob(blob => {
+    cropCanvas.toBlob(blob => {
       if (!blob) {
         reject(new Error('Failed to create pack icon')); return;
       }
@@ -242,10 +166,7 @@ async function generatePackIcon(armorStand) {
   });
 }
 
-async function generateResourcePack(armorStand, hssBoxes) {
-  const name =
-    document.getElementById("pack-name").value.trim() || "Fortress HSS";
-
+async function generateResourcePack(armorStand, hssBoxes, name, canvas) {
   const description =
     `Resource pack for visualizing fortress HSS boxes using armor stands.\n` +
     `Place an armor stand at (${armorStand.x}, ${armorStand.y}, ${armorStand.z}) and give it a blaze rod to show the HSS boxes.`;
@@ -256,7 +177,7 @@ async function generateResourcePack(armorStand, hssBoxes) {
     "models/entity/custom_boxes.geo.json",
     generateGeometry(armorStand, hssBoxes)
   );
-  zip.file("pack_icon.png", await generatePackIcon(armorStand));
+  zip.file("pack_icon.png", await generatePackIcon(armorStand, canvas));
 
   const templateFiles = [
     "template/animations/bounding_boxes.animation.json",

@@ -1,0 +1,30 @@
+name: Build and Deploy to GitHub Pages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Emscripten
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: latest
+
+    - name: Build WASM
+      run: |
+        mkdir -p build
+        cd build
+        emcmake cmake -G Ninja ..
+        emmake ninja -v
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./site

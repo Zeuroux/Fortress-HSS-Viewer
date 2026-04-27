@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fortress HSS</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d; --bg-bar: #111111; --bg-status: #0a0a0a;
+    --bg-guide: #0f0f0f; --border: #222222; --border-input: #2a2a2a;
+    --border-focus: #555555; --text: #c8c8c8; --text-label: #666666;
+    --text-input: #e0e0e0; --text-status: #444444; --text-ok: #5a8a5a;
+    --text-err: #8a4a4a; --text-overlay: #444444; --btn-border: #444444;
+    --btn-text: #dddddd; --btn-hover: #1a1a1a; --btn-active: #222222;
+    --g-head: #888888; --g-text: #555555; --g-sep: #1e1e1e;
+    --g-tag-bg: #1a1a1a; --g-tag: #666666; --ty-color: #666666;
+    --ty-border: #1e1e1e; --canvas-bg: #0d0d0d; --grid-chunk: #1a1a1a;
+    --grid-region: #262626; --axis: #2a2a2a;
+  }
+
+  [data-theme="light"] {
+    --bg: #f2f1ec; --bg-bar: #eae9e2; --bg-status: #e4e3dc;
+    --bg-guide: #eae9e2; --border: #d0cfc7; --border-input: #c8c7bf;
+    --border-focus: #999990; --text: #2c2c28; --text-label: #888880;
+    --text-input: #1a1a17; --text-status: #888880; --text-ok: #3a6a3a;
+    --text-err: #8a3a3a; --text-overlay: #aaa9a0; --btn-border: #b0afa8;
+    --btn-text: #333330; --btn-hover: #ddddd6; --btn-active: #d0cfc8;
+    --g-head: #555550; --g-text: #888880; --g-sep: #d0cfc7;
+    --g-tag-bg: #ddddd6; --g-tag: #888880; --ty-color: #aaa9a0;
+    --ty-border: #d8d7cf; --canvas-bg: #f2f1ec; --grid-chunk: #e0dfd8;
+    --grid-region: #cccbc3; --axis: #c4c3bb;
+  }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Courier New', monospace; font-size: 13px;
+    display: flex; flex-direction: column; height: 100vh;
+    overflow: hidden; transition: background 0.15s, color 0.15s;
+  }
+
+  #toolbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--bg-bar);
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+    flex-shrink: 0; transition: background 0.15s;
+  }
+
+  #toolbar label {
+    display: flex; flex-direction: column; gap: 2px;
+    color: var(--text-label); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
+  #toolbar input, #toolbar select {
+    background: var(--bg); border: 1px solid var(--border-input);
+    color: var(--text-input); font-family: inherit; font-size: 13px;
+    padding: 4px 6px; width: 110px; outline: none;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+
+  #toolbar input:focus, #toolbar select:focus { border-color: var(--border-focus); }
+  #toolbar select { width: 90px; }
+  #ty { color: var(--ty-color); border-color: var(--ty-border); }
+
+  #toolbar-group {
+    display: flex; gap: 12px;
+  }
+
+  #download, #theme-toggle {
+    background: none; border: 1px solid var(--btn-border);
+    color: var(--btn-text); font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  }
+
+  #pack-name { 
+    width: 165px !important;
+  }
+
+  #download {
+    margin-left: auto; padding: 6px 18px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  @media (max-width: 760px) {
+    #toolbar {
+      gap: 8px;
+      padding: 10px 10px;
+    }
+
+    #toolbar label {
+      flex: 1 1 140px;
+      min-width: 0;
+      width: 100%;
+    }
+
+    #toolbar input, #toolbar select {
+      width: 100%;
+    }
+
+    #toolbar-group {
+        width: 100%;
+    }
+
+    #pack-name {
+      width: 100% !important;
+    }
+
+    #download, #theme-toggle {
+      flex: 1 1 100%;
+      width: 100%;
+      margin-left: 0;
+      padding: 10px 12px;
+    }
+
+    #status {
+      font-size: 12px;
+      padding: 8px 12px;
+    }
+  }
+
+  #theme-toggle {
+    padding: 5px 9px; font-size: 15px;
+    border-color: var(--border-input); opacity: 0.65;
+  }
+
+  #download:hover { background: var(--btn-hover); border-color: var(--border-focus); }
+  #theme-toggle:hover { background: var(--btn-hover); border-color: var(--border-focus); opacity: 1; }
+  #download:active, #theme-toggle:active { background: var(--btn-active); }
+
+  #status {
+    padding: 4px 16px; font-size: 11px; color: var(--text-status);
+    background: var(--bg-status); border-bottom: 1px solid var(--border);
+    min-height: 22px; letter-spacing: 0.03em;
+    flex-shrink: 0; transition: background 0.15s;
+  }
+
+  #status.ok  { color: var(--text-ok); }
+  #status.err { color: var(--text-err); }
+
+  #main { flex: 1; display: flex; overflow: hidden; }
+
+  #viewport {
+    flex: 1; position: relative; overflow: hidden; cursor: crosshair;
+    touch-action: none;
+  }
+
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+  #coords {
+    position: absolute; bottom: 10px; right: 14px;
+    font-size: 11px; color: var(--text-overlay);
+    pointer-events: none; letter-spacing: 0.05em;
+  }
+
+  #legend {
+    position: absolute; bottom: 10px; left: 14px;
+    font-size: 11px; color: var(--text-overlay);
+    pointer-events: none; line-height: 1.8;
+  }
+
+  #legend span {
+    display: inline-block; width: 10px; height: 10px;
+    margin-right: 6px; vertical-align: middle;
+  }
+
+  .g-section { margin-bottom: 0; }
+  .g-section + .g-section { border-top: 1px solid var(--g-sep); padding-top: 16px; margin-top: 16px; }
+  .g-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--g-head); margin-bottom: 9px; }
+  .g-body { font-size: 11px; color: var(--g-text); line-height: 1.75; }
+  .g-body p              { margin-bottom: 6px; }
+  .g-body p:last-child   { margin-bottom: 0; }
+
+  .g-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 4px 0; border-bottom: 1px solid var(--g-sep);
+    font-size: 11px; gap: 8px;
+  }
+
+  .g-row:last-child { border-bottom: none; }
+  .g-key { color: var(--g-text); flex-shrink: 0; }
+  .g-val { color: var(--g-head); text-align: right; word-break: break-all; }
+
+  .g-tag {
+    display: inline-block; background: var(--g-tag-bg); color: var(--g-tag);
+    font-size: 10px; padding: 2px 7px; margin: 2px 2px 2px 0; letter-spacing: 0.04em;
+  }
+
+  .g-note {
+    font-size: 10px; color: var(--g-text); opacity: 0.6;
+    line-height: 1.6; margin-top: 6px; font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button id="theme-toggle" title="Toggle light / dark">☽</button>
+  <label>Version
+    <select id="ver">
+      <option>1.21.60</option><option>1.21.50</option><option>1.21.0</option>
+      <option>1.20.0</option><option>1.19.0</option><option>1.18.0</option>
+      <option>1.17.30</option><option>1.17.0</option><option>1.16.0</option>
+      <option>1.14.0</option><option>1.13.0</option><option>1.12.0</option>
+      <option>1.11.0</option><option>1.10.0</option><option>1.9.0</option>
+      <option>1.8.0</option><option>1.7.0</option><option>26.20</option>
+    </select>
+  </label>
+  <label>Seed
+    <input id="seed" value="0" placeholder="seed">
+  </label>
+  <div id="toolbar-group">
+    <label>Target X
+    <input id="tx" type="number" value="0">
+    </label>
+    <label>Target Y
+      <input id="ty" type="number" value="0" placeholder="(reserved)">
+    </label>
+    <label>Target Z
+      <input id="tz" type="number" value="0">
+    </label>
+  </div>
+  <label>Pack Name
+    <input id="pack-name" value="Fortress HSS Viewer">
+  </label>
+  <button id="download">Download</button>
+</div>
+
+<div id="status">ready — loading wasm…</div>
+
+<div id="main">
+
+  <div id="viewport">
+    <canvas id="c"></canvas>
+    <div id="coords"></div>
+    <div id="legend">
+      <div><span style="background:#3a6b8a"></span>Spawn Spots</div>
+      <div><span style="background:#dc3232"></span>Nether Fortress</div>
+      <div><span style="background:#e05050; border-radius:50%"></span>armor stand</div>
+    </div>
+  </div>
+
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="pack-generator.js"></script>
+<script src="index.js"></script>
+</body>
+</html>

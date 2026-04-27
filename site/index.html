@@ -68,7 +68,7 @@
     display: flex; gap: 12px;
   }
 
-  #download, #theme-toggle {
+  #download, #paste-coords, #theme-toggle {
     background: none; border: 1px solid var(--btn-border);
     color: var(--btn-text); font-family: inherit; font-size: 13px;
     cursor: pointer; transition: background 0.15s, border-color 0.15s;
@@ -81,6 +81,10 @@
   #download {
     margin-left: auto; padding: 6px 18px;
     letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  #paste-coords {
+    padding: 6px 12px; letter-spacing: 0.05em;
   }
 
   @media (max-width: 760px) {
@@ -107,7 +111,7 @@
       width: 100% !important;
     }
 
-    #download, #theme-toggle {
+    #download, #paste-coords, #theme-toggle {
       flex: 1 1 100%;
       width: 100%;
       margin-left: 0;
@@ -128,6 +132,9 @@
   #download:hover { background: var(--btn-hover); border-color: var(--border-focus); }
   #theme-toggle:hover { background: var(--btn-hover); border-color: var(--border-focus); opacity: 1; }
   #download:active, #theme-toggle:active { background: var(--btn-active); }
+
+  #paste-coords:hover { background: var(--btn-hover); border-color: var(--border-focus); }
+  #paste-coords:active { background: var(--btn-active); }
 
   #status {
     padding: 4px 16px; font-size: 11px; color: var(--text-status);
@@ -224,6 +231,7 @@
   <label>Pack Name
     <input id="pack-name" value="Fortress HSS Viewer">
   </label>
+  <button id="paste-coords">Paste Coordinates</button>
   <button id="download">Download</button>
 </div>
 

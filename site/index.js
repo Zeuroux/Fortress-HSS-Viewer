@@ -540,26 +540,46 @@ document.getElementById('download').addEventListener('click', async () => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
 
-document.addEventListener('paste', e => {
-  const tag = document.activeElement?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+const updateFromCoordString = (text) => {
+  const matches = [...text.matchAll(/-?\d+(?:\.\d+)?/g)];
+  if (matches.length < 3) return false;
 
-  const text = (e.clipboardData || window.clipboardData).getData('text');
-  const nums = [...text.matchAll(/-?\d+(?:\.\d+)?/g)].map(m => Math.floor(Number(m[0])));
-  if (nums.length < 3) return;
+  const [x, y, z] = matches.slice(0, 3).map(m => Math.floor(Number(m[0])));
 
-  e.preventDefault();
-  txEl.value = nums[0];
-  tyEl.value = nums[1];
-  tzEl.value = nums[2];
-  armorStand.x = nums[0];
-  armorStand.y = nums[1];
-  armorStand.z = nums[2];
-  panX = nums[0];
-  panZ = nums[2];
+  txEl.value = x;
+  tyEl.value = y;
+  tzEl.value = z;
+
+  Object.assign(armorStand, { x, y, z });
+  panX = x;
+  panZ = z;
+
   saveCoordinates();
   run();
   requestDraw();
+
+  return true;
+};
+
+document.addEventListener('paste', (e) => {
+  const activeTag = document.activeElement?.tagName;
+  if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (updateFromCoordString(text)) {
+    e.preventDefault();
+  }
+});
+
+document.getElementById('paste-coords').addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!updateFromCoordString(text)) {
+      setStatus('err', 'Clipboard does not contain valid coordinates (need 3 numbers)');
+    }
+  } catch (err) {
+    setStatus('err', `Failed to read clipboard: ${err.message}`);
+  }
 });
 
 function run() {

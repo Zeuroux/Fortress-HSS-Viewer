@@ -23,7 +23,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        emcmake cmake -G Ninja ..
+        emcmake cmake -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel ..
         emmake ninja -v
 
     - name: Deploy to GitHub Pages

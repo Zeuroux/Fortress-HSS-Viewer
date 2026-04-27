@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
-
+set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
 project(FortressWASM LANGUAGES C CXX)
+
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -17,6 +19,8 @@ add_executable(fortress
 
 target_compile_features(fortress PRIVATE cxx_std_17)
 
+target_compile_options(fortress PRIVATE "-Oz")
+
 set_target_properties(fortress PROPERTIES
     CXX_EXTENSIONS OFF
     SUFFIX ".js"
@@ -31,7 +35,7 @@ target_link_libraries(fortress PRIVATE
 )
 
 target_link_options(fortress PRIVATE
-    "-O2"
+    "-Oz"
     "--bind"
     "-sWASM=1"
     "-sALLOW_MEMORY_GROWTH=1"
@@ -39,6 +43,7 @@ target_link_options(fortress PRIVATE
     "-sEXPORT_NAME=FortressModule"
     "-sEXPORTED_RUNTIME_METHODS=HEAPF32"
     "-sENVIRONMENT=web,worker"
+    "-sSINGLE_FILE=1"
 )
 
 add_custom_command(TARGET fortress POST_BUILD

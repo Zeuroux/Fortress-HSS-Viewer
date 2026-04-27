@@ -13,7 +13,7 @@ function applyTheme(t) {
   localStorage.setItem('theme', t);
   themeBtn.textContent = t === 'dark' ? '☽' : '☀';
   if (typeof draw === 'function' && typeof ctx !== 'undefined') {
-    draw();
+    requestDraw();
   }
 }
 
@@ -42,6 +42,17 @@ let dragging = false, dragStartX = 0, dragStartZ = 0, dragOriginX = 0, dragOrigi
 let fetchTimeout = null;
 let isFetching = false;
 
+let rafPending = false;
+function requestDraw() {
+  if (!rafPending) {
+    rafPending = true;
+    requestAnimationFrame(() => { rafPending = false; draw(); });
+  }
+}
+
+let lastFetchedBounds = null;
+function invalidateFetchBounds() { lastFetchedBounds = null; }
+
 function resize() {
   const cw = canvas.clientWidth;
   const ch = canvas.clientHeight;
@@ -49,7 +60,8 @@ function resize() {
   canvas.width = Math.max(1, Math.floor(cw * dpr));
   canvas.height = Math.max(1, Math.floor(ch * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  draw();
+  invalidateFetchBounds();
+  requestDraw();
   scheduleFetch();
 }
 
@@ -71,7 +83,15 @@ function draw() {
   if (!ctx) return;
   const W = canvas.clientWidth, H = canvas.clientHeight;
 
-  ctx.fillStyle = cssVar('--canvas-bg');
+  const colCanvasBg    = cssVar('--canvas-bg');
+  const colGridChunk   = cssVar('--grid-chunk');
+  const colGridRegion  = cssVar('--grid-region');
+  const colAxis        = cssVar('--axis');
+  const colBgStatus    = cssVar('--bg-status');
+  const colBorderInput = cssVar('--border-input');
+  const colTextOverlay = cssVar('--text-overlay');
+
+  ctx.fillStyle = colCanvasBg;
   ctx.fillRect(0, 0, W, H);
 
   const CHUNK = 16;
@@ -81,49 +101,94 @@ function draw() {
   const cx0 = Math.floor((tl.wx - OFF) / CHUNK) * CHUNK + OFF;
   const cz0 = Math.floor((tl.wz - OFF) / CHUNK) * CHUNK + OFF;
 
+  ctx.strokeStyle = colGridChunk;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
   for (let gx = cx0; gx <= br.wx; gx += CHUNK) {
+    if ((gx - OFF) % 256 === 0) continue;
     const { cx } = worldToCanvas(gx, 0);
-    const isReg = (gx - OFF) % 256 === 0;
-    ctx.strokeStyle = cssVar(isReg ? '--grid-region' : '--grid-chunk');
-    ctx.lineWidth = isReg ? 1.5 : 1;
-    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+    ctx.moveTo(cx, 0); ctx.lineTo(cx, H);
   }
   for (let gz = cz0; gz <= br.wz; gz += CHUNK) {
+    if ((gz - OFF) % 256 === 0) continue;
     const { cy } = worldToCanvas(0, gz);
-    const isReg = (gz - OFF) % 256 === 0;
-    ctx.strokeStyle = cssVar(isReg ? '--grid-region' : '--grid-chunk');
-    ctx.lineWidth = isReg ? 1.5 : 1;
-    ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+    ctx.moveTo(0, cy); ctx.lineTo(W, cy);
   }
+  ctx.stroke();
+
+  ctx.strokeStyle = colGridRegion;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let gx = cx0; gx <= br.wx; gx += CHUNK) {
+    if ((gx - OFF) % 256 !== 0) continue;
+    const { cx } = worldToCanvas(gx, 0);
+    ctx.moveTo(cx, 0); ctx.lineTo(cx, H);
+  }
+  for (let gz = cz0; gz <= br.wz; gz += CHUNK) {
+    if ((gz - OFF) % 256 !== 0) continue;
+    const { cy } = worldToCanvas(0, gz);
+    ctx.moveTo(0, cy); ctx.lineTo(W, cy);
+  }
+  ctx.stroke();
 
   const origin = worldToCanvas(0, 0);
-  ctx.strokeStyle = cssVar('--axis'); ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(origin.cx, 0); ctx.lineTo(origin.cx, H); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, origin.cy); ctx.lineTo(W, origin.cy); ctx.stroke();
+  ctx.strokeStyle = colAxis; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(origin.cx, 0); ctx.lineTo(origin.cx, H);
+  ctx.moveTo(0, origin.cy); ctx.lineTo(W, origin.cy);
+  ctx.stroke();
 
-  for (const b of autoBoxes) {
-    const { cx, cy } = worldToCanvas(b.px - .5 - b.sx / 2, b.pz - .5 - b.sz / 2);
+  if (autoBoxes.length > 0) {
     ctx.fillStyle = 'rgba(220, 50, 50, 0.3)';
+    ctx.beginPath();
+    for (const b of autoBoxes) {
+      const { cx, cy } = worldToCanvas(b.px - .5 - b.sx / 2, b.pz - .5 - b.sz / 2);
+      const pw = b.sx * scale, ph = b.sz * scale;
+      if (cx + pw < 0 || cx > W || cy + ph < 0 || cy > H) continue;
+      ctx.rect(cx, cy, pw, ph);
+    }
+    ctx.fill();
     ctx.strokeStyle = '#dc3232';
     ctx.lineWidth = 1;
-    ctx.fillRect(cx, cy, b.sx * scale, b.sz * scale);
-    ctx.strokeRect(cx, cy, b.sx * scale, b.sz * scale);
+    ctx.beginPath();
+    for (const b of autoBoxes) {
+      const { cx, cy } = worldToCanvas(b.px - .5 - b.sx / 2, b.pz - .5 - b.sz / 2);
+      const pw = b.sx * scale, ph = b.sz * scale;
+      if (cx + pw < 0 || cx > W || cy + ph < 0 || cy > H) continue;
+      ctx.rect(cx, cy, pw, ph);
+    }
+    ctx.stroke();
   }
 
-  for (const b of hssBoxes) {
-    const { cx, cy } = worldToCanvas(b.px - b.sx / 2, b.pz - b.sz / 2);
+  if (hssBoxes.length > 0) {
     ctx.fillStyle = 'rgba(58,107,138,0.25)';
+    ctx.beginPath();
+    for (const b of hssBoxes) {
+      const { cx, cy } = worldToCanvas(b.px - b.sx / 2, b.pz - b.sz / 2);
+      const pw = b.sx * scale, ph = b.sz * scale;
+      if (cx + pw < 0 || cx > W || cy + ph < 0 || cy > H) continue;
+      ctx.rect(cx, cy, pw, ph);
+    }
+    ctx.fill();
     ctx.strokeStyle = '#3a6b8a';
     ctx.lineWidth = 1;
-    ctx.fillRect(cx, cy, b.sx * scale, b.sz * scale);
-    ctx.strokeRect(cx, cy, b.sx * scale, b.sz * scale);
+    ctx.beginPath();
+    for (const b of hssBoxes) {
+      const { cx, cy } = worldToCanvas(b.px - b.sx / 2, b.pz - b.sz / 2);
+      const pw = b.sx * scale, ph = b.sz * scale;
+      if (cx + pw < 0 || cx > W || cy + ph < 0 || cy > H) continue;
+      ctx.rect(cx, cy, pw, ph);
+    }
+    ctx.stroke();
   }
 
   const ap = worldToCanvas(armorStand.x, armorStand.z);
   const r = 5;
   ctx.strokeStyle = '#e05050'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(ap.cx - r - 3, ap.cy); ctx.lineTo(ap.cx + r + 3, ap.cy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(ap.cx, ap.cy - r - 3); ctx.lineTo(ap.cx, ap.cy + r + 3); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(ap.cx - r - 3, ap.cy); ctx.lineTo(ap.cx + r + 3, ap.cy);
+  ctx.moveTo(ap.cx, ap.cy - r - 3); ctx.lineTo(ap.cx, ap.cy + r + 3);
+  ctx.stroke();
   ctx.fillStyle = '#e05050';
   ctx.beginPath(); ctx.arc(ap.cx, ap.cy, 3, 0, Math.PI * 2); ctx.fill();
 
@@ -134,53 +199,53 @@ function draw() {
   const rulerCx0 = Math.floor((tl.wx - OFF) / tickStep) * tickStep + OFF;
   const rulerCz0 = Math.floor((tl.wz - OFF) / tickStep) * tickStep + OFF;
 
-  ctx.fillStyle = cssVar('--bg-status');
+  ctx.fillStyle = colBgStatus;
   ctx.fillRect(0, 0, W, RULER_SIZE);
   ctx.fillRect(0, 0, RULER_SIZE, H);
-  ctx.strokeStyle = cssVar('--border-input');
+  ctx.strokeStyle = colBorderInput;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(RULER_SIZE, RULER_SIZE - 0.5);
-  ctx.lineTo(W, RULER_SIZE - 0.5);
-  ctx.moveTo(RULER_SIZE - 0.5, RULER_SIZE);
-  ctx.lineTo(RULER_SIZE - 0.5, H);
+  ctx.moveTo(RULER_SIZE, RULER_SIZE - 0.5); ctx.lineTo(W, RULER_SIZE - 0.5);
+  ctx.moveTo(RULER_SIZE - 0.5, RULER_SIZE); ctx.lineTo(RULER_SIZE - 0.5, H);
   ctx.stroke();
 
-  ctx.fillStyle = cssVar('--text-overlay');
+  ctx.fillStyle = colTextOverlay;
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
 
+  ctx.beginPath();
+  for (let gx = rulerCx0; gx <= br.wx; gx += tickStep) {
+    const { cx } = worldToCanvas(gx, 0);
+    if (cx < RULER_SIZE || cx > W) continue;
+    const tickHeight = (Math.round(gx + 0.5) % 256 === 0) ? 10 : 6;
+    ctx.moveTo(cx, RULER_SIZE - tickHeight);
+    ctx.lineTo(cx, RULER_SIZE);
+  }
+  ctx.stroke();
   for (let gx = rulerCx0; gx <= br.wx; gx += tickStep) {
     const { cx } = worldToCanvas(gx, 0);
     if (cx < RULER_SIZE || cx > W) continue;
     const worldX = Math.round(gx + 0.5);
-    const isMajor = (worldX % 256 === 0);
-    const tickHeight = isMajor ? 10 : 6;
-    ctx.beginPath();
-    ctx.moveTo(cx, RULER_SIZE - tickHeight);
-    ctx.lineTo(cx, RULER_SIZE);
-    ctx.stroke();
-    if (worldX % labelStep === 0) {
-      ctx.fillText(`${worldX}`, cx, 2);
-    }
+    if (worldX % labelStep === 0) ctx.fillText(`${worldX}`, cx, 2);
   }
 
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
+  ctx.beginPath();
+  for (let gz = rulerCz0; gz <= br.wz; gz += tickStep) {
+    const { cy } = worldToCanvas(0, gz);
+    if (cy < RULER_SIZE || cy > H) continue;
+    const tickWidth = (Math.round(gz + 0.5) % 256 === 0) ? 10 : 6;
+    ctx.moveTo(RULER_SIZE - tickWidth, cy);
+    ctx.lineTo(RULER_SIZE, cy);
+  }
+  ctx.stroke();
   for (let gz = rulerCz0; gz <= br.wz; gz += tickStep) {
     const { cy } = worldToCanvas(0, gz);
     if (cy < RULER_SIZE || cy > H) continue;
     const worldZ = Math.round(gz + 0.5);
-    const isMajor = (worldZ % 256 === 0);
-    const tickWidth = isMajor ? 10 : 6;
-    ctx.beginPath();
-    ctx.moveTo(RULER_SIZE - tickWidth, cy);
-    ctx.lineTo(RULER_SIZE, cy);
-    ctx.stroke();
-    if (worldZ % labelStep === 0) {
-      ctx.fillText(`${worldZ}`, RULER_SIZE - 4, cy);
-    }
+    if (worldZ % labelStep === 0) ctx.fillText(`${worldZ}`, RULER_SIZE - 4, cy);
   }
 
   ctx.textAlign = 'left';
@@ -189,19 +254,12 @@ function draw() {
   ctx.fillText('Z', 2, RULER_SIZE + 2);
 }
 
-/**
- * Calculates the required chunk radius to cover the visible canvas
- * with some buffer, then fetches fortress boxes for that area.
- */
 let lastFetch = 0;
 function fetchVisibleBoxes() {
-  if (!moduleReady || isFetching || Date.now() - lastFetch < 300) return;
-  lastFetch = Date.now();
+  if (!moduleReady || isFetching) return;
   const version = verEl.value;
   const seedInput = seedEl.value;
   if (!version || !seedInput) return;
-
-  const rawSeed = BigInt(seedInput || '0');
 
   const W = canvas.clientWidth, H = canvas.clientHeight;
   const tl = canvasToWorld(0, 0);
@@ -210,16 +268,35 @@ function fetchVisibleBoxes() {
   const centerX = Math.round((tl.wx + br.wx) / 2);
   const centerZ = Math.round((tl.wz + br.wz) / 2);
 
-  const viewWidthChunks = Math.ceil(Math.abs(br.wx - tl.wx) / 16) / 2;
+  const viewWidthChunks  = Math.ceil(Math.abs(br.wx - tl.wx) / 16) / 2;
   const viewHeightChunks = Math.ceil(Math.abs(br.wz - tl.wz) / 16) / 2;
   const chunkRadius = Math.min(Math.max(viewWidthChunks, viewHeightChunks) + 20, MAX_CHUNK_RADIUS);
 
+  if (lastFetchedBounds) {
+    const pad = 8 * 16;
+    if (tl.wx >= lastFetchedBounds.minX + pad &&
+        br.wx <= lastFetchedBounds.maxX - pad &&
+        tl.wz >= lastFetchedBounds.minZ + pad &&
+        br.wz <= lastFetchedBounds.maxZ - pad) {
+      return;
+    }
+  }
+
+  const rawSeed = BigInt(seedInput);
   isFetching = true;
   status.textContent = `loading… (r=${chunkRadius})`;
 
   try {
     const result = Module.findFortressBoxesRaw(version, rawSeed, centerX, centerZ, chunkRadius);
     autoBoxes = parseRawBoxes(result);
+
+    const fetchedBlocks = chunkRadius * 16;
+    lastFetchedBounds = {
+      minX: centerX - fetchedBlocks,
+      maxX: centerX + fetchedBlocks,
+      minZ: centerZ - fetchedBlocks,
+      maxZ: centerZ + fetchedBlocks,
+    };
 
     if (hssBoxes.length === 0) {
       setStatus(autoBoxes.length === 0 ? '' : 'ok', `${autoBoxes.length} piece${autoBoxes.length === 1 ? '' : 's'}`);
@@ -233,12 +310,9 @@ function fetchVisibleBoxes() {
   }
 
   isFetching = false;
-  draw();
+  requestDraw();
 }
 
-/**
- * Debounced fetch to avoid spamming WASM calls during rapid pan/zoom
- */
 function parseRawBoxes(raw) {
   if (!raw.ptr || raw.count <= 0) return [];
   const ptr = Number(raw.ptr);
@@ -259,7 +333,7 @@ function parseRawBoxes(raw) {
 
 function scheduleFetch() {
   if (fetchTimeout) clearTimeout(fetchTimeout);
-  fetchTimeout = setTimeout(fetchVisibleBoxes, 100);
+  fetchTimeout = setTimeout(fetchVisibleBoxes, 400);
 }
 
 const CLICK_THRESHOLD = 5;
@@ -330,8 +404,8 @@ vp.addEventListener('pointermove', e => {
     }
     panX = pointerState.dragOriginX - dx / scale;
     panZ = pointerState.dragOriginZ - dy / scale;
-    draw();
-    if (pointerState.moved) scheduleFetch();
+    requestDraw();
+    if (pointerState.moved) fetchVisibleBoxes();
   } else if (pointerState.pointers.size === 2) {
     const pts = Array.from(pointerState.pointers.values());
     const newDist = getDistance(pts[0], pts[1]);
@@ -346,7 +420,7 @@ vp.addEventListener('pointermove', e => {
         scale = newScale;
         panX = worldMid.wx - ((midX - rect.left) - canvas.clientWidth / 2) / scale;
         panZ = worldMid.wz - ((midY - rect.top) - canvas.clientHeight / 2) / scale;
-        draw();
+        requestDraw();
       }
     }
   }
@@ -364,8 +438,9 @@ function cleanupPointer(e) {
       document.getElementById('tz').value = rz;
       armorStand.x = rx;
       armorStand.z = rz;
+      saveCoordinates();
       run();
-      draw();
+      requestDraw();
     }
     pointerState.dragging = false;
     pointerState.moved = false;
@@ -396,15 +471,15 @@ vp.addEventListener('wheel', e => {
   const newScale = scale * f;
 
   if (newScale < MIN_SCALE || newScale > MAX_SCALE) {
-    draw();
+    requestDraw();
     return;
   }
 
   scale = newScale;
   panX = wx - (offsetX - canvas.clientWidth / 2) / scale;
   panZ = wz - (offsetY - canvas.clientHeight / 2) / scale;
-  draw();
-  scheduleFetch();
+  requestDraw();
+  fetchVisibleBoxes();
 }, { passive: false });
 
 let Module = null, moduleReady = false;
@@ -419,14 +494,20 @@ script.onload = () => {
     Module = m;
     moduleReady = true;
     setStatus('ok', 'wasm ready');
+    armorStand.x = parseInt(txEl.value) || 0;
+    armorStand.y = parseInt(tyEl.value) || 0;
+    armorStand.z = parseInt(tzEl.value) || 0;
+    panX = armorStand.x;
+    panZ = armorStand.z;
     fetchVisibleBoxes();
+    run()
   }).catch(err => setStatus('err', 'wasm init failed: ' + err));
 };
 script.onerror = () => setStatus('err', 'fortress.js not found');
 document.head.appendChild(script);
 
-document.getElementById('seed').addEventListener('input', scheduleFetch);
-document.getElementById('ver').addEventListener('change', scheduleFetch);
+document.getElementById('seed').addEventListener('input', () => { invalidateFetchBounds(); scheduleFetch(); });
+document.getElementById('ver').addEventListener('change', () => { invalidateFetchBounds(); scheduleFetch(); });
 
 let runTimeout = null;
 function scheduleRun() {
@@ -440,7 +521,6 @@ txEl.addEventListener('input', scheduleRun);
 tyEl.addEventListener('input', scheduleRun);
 tzEl.addEventListener('input', scheduleRun);
 
-// Save coordinates to localStorage
 function saveCoordinates() {
   localStorage.setItem('tx', txEl.value);
   localStorage.setItem('ty', tyEl.value);
@@ -451,8 +531,36 @@ txEl.addEventListener('input', saveCoordinates);
 tyEl.addEventListener('input', saveCoordinates);
 tzEl.addEventListener('input', saveCoordinates);
 
-document.getElementById('download').addEventListener('click', () => generateResourcePack(armorStand, hssBoxes));
+document.getElementById('download').addEventListener('click', async () => {
+  scale = 2;
+  fetchVisibleBoxes();
+  setTimeout(() => {
+    generateResourcePack(armorStand, hssBoxes, document.getElementById("pack-name").value.trim() || "Fortress HSS", canvas)
+  }, 1)
+});
 document.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+
+document.addEventListener('paste', e => {
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  const nums = [...text.matchAll(/-?\d+(?:\.\d+)?/g)].map(m => Math.floor(Number(m[0])));
+  if (nums.length < 3) return;
+
+  e.preventDefault();
+  txEl.value = nums[0];
+  tyEl.value = nums[1];
+  tzEl.value = nums[2];
+  armorStand.x = nums[0];
+  armorStand.y = nums[1];
+  armorStand.z = nums[2];
+  panX = nums[0];
+  panZ = nums[2];
+  saveCoordinates();
+  run();
+  requestDraw();
+});
 
 function run() {
   if (!moduleReady) { setStatus('err', 'wasm not ready yet'); return; }
@@ -478,7 +586,8 @@ function run() {
     setStatus('err', 'error: ' + e.message);
   }
 
-  draw();
+  requestDraw();
+  invalidateFetchBounds();
   scheduleFetch();
 }
 
@@ -496,14 +605,6 @@ const savedTz = localStorage.getItem('tz');
 if (savedTx !== null) txEl.value = savedTx;
 if (savedTy !== null) tyEl.value = savedTy;
 if (savedTz !== null) tzEl.value = savedTz;
-
-armorStand.x = parseInt(txEl.value) || 0;
-armorStand.y = parseInt(tyEl.value) || 0;
-armorStand.z = parseInt(tzEl.value) || 0;
-panX = armorStand.x;
-panZ = armorStand.z;
-
-setTimeout(run, 100);
 
 window.addEventListener('resize', resize);
 resize();

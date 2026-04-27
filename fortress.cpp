@@ -45,61 +45,10 @@ inline MCVersion parseMCVersion(std::string_view version) {
     return (it != mcVersionTable.end()) ? it->second : MC_UNDEF;
 }
 
-
-inline int64_t fortressDistSq(int x1, int z1, int x2, int z2) {
-    int64_t dx = (int64_t)x1 - x2;
-    int64_t dz = (int64_t)z1 - z2;
-    return dx * dx + dz * dz;
-}
-
 inline int blockToRegion(int coord, int regionSizeInBlocks) {
     return coord < 0
         ? (coord - regionSizeInBlocks + 1) / regionSizeInBlocks
         : coord / regionSizeInBlocks;
-}
-
-
-inline Pos findNearestFortress(Generator* g, int mc, uint64_t seed,
-                               int targetX, int targetZ) {
-    StructureConfig sconf;
-    if (!getStructureConfig(Fortress, mc, &sconf)) {
-        return {0, 0};
-    }
-
-    const int regionSizeChunks = sconf.regionSize;
-    const int regionBlocks     = regionSizeChunks * 16;
-    const int baseRegX         = blockToRegion(targetX, regionBlocks);
-    const int baseRegZ         = blockToRegion(targetZ, regionBlocks);
-
-    Pos     nearest  = {0, 0};
-    int64_t bestDist = INT64_MAX;
-
-    for (int rad = 0; rad <= 64; ++rad) {
-        for (int dz = -rad; dz <= rad; ++dz) {
-            for (int dx = -rad; dx <= rad; ++dx) {
-                if (rad > 0 && std::abs(dx) != rad && std::abs(dz) != rad)
-                    continue;
-                    
-                Pos p;
-                if (!getStructurePos(Fortress, mc, seed, baseRegX + dx, baseRegZ + dz, &p))
-                    continue;
-                if (!isViableStructurePos(Fortress, g, p.x, p.z, 0))
-                    continue;
-                    
-                const int64_t dist = fortressDistSq(targetX, targetZ, p.x, p.z);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    nearest = p;
-                }
-            }
-        }
-        
-        if (bestDist != INT64_MAX && (int64_t)(rad + 1) * (rad + 1) * 16 * 16 > bestDist * 1.5) {
-            break;
-        }
-    }
-
-    return nearest;
 }
 
 inline std::vector<float> piecesToHSSFlat(const Piece* pieces, int count) {
@@ -204,25 +153,53 @@ RawResult findFortressHSSRaw(
     setupGenerator(&g, mc, 0);
     applySeed(&g, DIM_NETHER, seed);
 
-    const Pos start = findNearestFortress(&g, mc, seed, targetX, targetZ);
-    if (start.x == 0 && start.z == 0) {
+    StructureConfig sconf;
+    if (!getStructureConfig(Fortress, mc, &sconf)) {
         return {0, 0};
     }
+
+    const int chunkRadius      = 10;
+    const int regionSizeChunks = sconf.regionSize;
+    const int regionBlocks     = regionSizeChunks * 16;
+    const int centerChunkX     = targetX >> 4;
+    const int centerChunkZ     = targetZ >> 4;
+    const int minRegX = blockToRegion((centerChunkX - chunkRadius) * 16, regionBlocks);
+    const int maxRegX = blockToRegion((centerChunkX + chunkRadius) * 16, regionBlocks);
+    const int minRegZ = blockToRegion((centerChunkZ - chunkRadius) * 16, regionBlocks);
+    const int maxRegZ = blockToRegion((centerChunkZ + chunkRadius) * 16, regionBlocks);
 
     Piece* pieces = static_cast<Piece*>(std::calloc(static_cast<size_t>(2048), sizeof(Piece)));
     if (!pieces) {
         return {0, 0};
     }
 
-    const int count = getFortressPieces(pieces, 2048, mc, seed, start.x >> 4, start.z >> 4);
-    if (count <= 0) {
-        std::free(pieces);
-        return {0, 0};
+    std::vector<float> boxes;
+
+    for (int rz = minRegZ; rz <= maxRegZ; ++rz) {
+        for (int rx = minRegX; rx <= maxRegX; ++rx) {
+            Pos p;
+            if (!getStructurePos(Fortress, mc, seed, rx, rz, &p))
+                continue;
+            if (!isViableStructurePos(Fortress, &g, p.x, p.z, 0))
+                continue;
+
+            const int fortChunkX = p.x >> 4;
+            const int fortChunkZ = p.z >> 4;
+            if (std::abs(fortChunkX - centerChunkX) > chunkRadius ||
+                std::abs(fortChunkZ - centerChunkZ) > chunkRadius)
+                continue;
+
+            const int count = getFortressPieces(pieces, 2048, mc, seed, fortChunkX, fortChunkZ);
+            if (count <= 0)
+                continue;
+
+            auto hss = piecesToHSSFlat(pieces, count);
+            boxes.insert(boxes.end(), hss.begin(), hss.end());
+        }
     }
 
-    auto boxed = piecesToHSSFlat(pieces, count);
     std::free(pieces);
-    return makeRawResult(std::move(boxed));
+    return makeRawResult(std::move(boxes));
 }
 
 RawResult findFortressBoxesRaw(

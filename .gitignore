@@ -1,2 +1,4 @@
 build/
 .vscode/
+site/fortress.js
+site/fortress.wasm

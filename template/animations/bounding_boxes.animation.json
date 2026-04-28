@@ -4,7 +4,19 @@
     "animation.bounding_boxes": {
       "loop": true,
       "bones": {
-        "root": { "rotation": [0, "v.bounding_box_yaw", 0] }
+        "root": {
+          "scale": 16.0,
+          "rotation": [
+            0,
+            "-query.body_y_rotation",
+            0
+          ],
+          "position": [
+            "(-((query.position(0))*math.cos(query.body_y_rotation)) - ((query.position(2))*math.sin(query.body_y_rotation))) * 16",
+            "(-query.position(1))*16",
+            "(((query.position(2))*math.cos(query.body_y_rotation)) - ((query.position(0))*math.sin(query.body_y_rotation))) * 16"
+          ]
+        }
       }
     }
   }

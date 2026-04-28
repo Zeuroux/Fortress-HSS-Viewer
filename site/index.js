@@ -3,7 +3,6 @@ const themeBtn = document.getElementById('theme-toggle');
 const verEl = document.getElementById('ver');
 const seedEl = document.getElementById('seed');
 const txEl = document.getElementById('tx');
-const tyEl = document.getElementById('ty');
 const tzEl = document.getElementById('tz');
 const status = document.getElementById('status');
 const coords = document.getElementById('coords');
@@ -30,13 +29,12 @@ const ctx = canvas.getContext('2d');
 
 let autoBoxes = [];
 let hssBoxes = [];
-let armorStand = { x: 0, y: 0, z: 0 };
 
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 64;
 const MAX_CHUNK_RADIUS = 512;
 
-let panX = 0, panZ = 0, scale = 4;
+let panX = 0, panZ = 0, scale = 1;
 let dragging = false, dragStartX = 0, dragStartZ = 0, dragOriginX = 0, dragOriginZ = 0;
 
 let fetchTimeout = null;
@@ -181,16 +179,6 @@ function draw() {
     }
     ctx.stroke();
   }
-
-  const ap = worldToCanvas(armorStand.x, armorStand.z);
-  const r = 5;
-  ctx.strokeStyle = '#e05050'; ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(ap.cx - r - 3, ap.cy); ctx.lineTo(ap.cx + r + 3, ap.cy);
-  ctx.moveTo(ap.cx, ap.cy - r - 3); ctx.lineTo(ap.cx, ap.cy + r + 3);
-  ctx.stroke();
-  ctx.fillStyle = '#e05050';
-  ctx.beginPath(); ctx.arc(ap.cx, ap.cy, 3, 0, Math.PI * 2); ctx.fill();
 
   const RULER_SIZE = 24;
   const minTickPixels = 50;
@@ -436,10 +424,7 @@ function cleanupPointer(e) {
       const rz = Math.round(wz);
       document.getElementById('tx').value = rx;
       document.getElementById('tz').value = rz;
-      armorStand.x = rx;
-      armorStand.z = rz;
-      saveCoordinates();
-      run();
+      run(rx, rz);
       requestDraw();
     }
     pointerState.dragging = false;
@@ -494,51 +479,19 @@ script.onload = () => {
     Module = m;
     moduleReady = true;
     setStatus('ok', 'wasm ready');
-    armorStand.x = parseInt(txEl.value) || 0;
-    armorStand.y = parseInt(tyEl.value) || 0;
-    armorStand.z = parseInt(tzEl.value) || 0;
-    panX = armorStand.x;
-    panZ = armorStand.z;
-    fetchVisibleBoxes();
-    run()
+    panX = parseInt(txEl.value) || 0;
+    panZ = parseInt(tzEl.value) || 0;
   }).catch(err => setStatus('err', 'wasm init failed: ' + err));
 };
 script.onerror = () => setStatus('err', 'fortress.js not found');
 document.head.appendChild(script);
 
-document.getElementById('seed').addEventListener('input', () => { invalidateFetchBounds(); scheduleFetch(); });
-document.getElementById('ver').addEventListener('change', () => { invalidateFetchBounds(); scheduleFetch(); });
-
-let runTimeout = null;
-function scheduleRun() {
-  if (runTimeout) clearTimeout(runTimeout);
-  runTimeout = setTimeout(run, 500);
-}
-
-seedEl.addEventListener('input', scheduleRun);
-verEl.addEventListener('change', scheduleRun);
-txEl.addEventListener('input', scheduleRun);
-tyEl.addEventListener('input', scheduleRun);
-tzEl.addEventListener('input', scheduleRun);
-
-function saveCoordinates() {
-  localStorage.setItem('tx', txEl.value);
-  localStorage.setItem('ty', tyEl.value);
-  localStorage.setItem('tz', tzEl.value);
-}
-
-txEl.addEventListener('input', saveCoordinates);
-tyEl.addEventListener('input', saveCoordinates);
-tzEl.addEventListener('input', saveCoordinates);
+document.getElementById('seed').addEventListener('input', () => { hssBoxes = []; invalidateFetchBounds(); scheduleFetch();});
+document.getElementById('ver').addEventListener('change', () => { hssBoxes = []; invalidateFetchBounds(); scheduleFetch(); });
 
 document.getElementById('download').addEventListener('click', async () => {
-  scale = 2;
-  fetchVisibleBoxes();
-  setTimeout(() => {
-    generateResourcePack(armorStand, hssBoxes, document.getElementById("pack-name").value.trim() || "Fortress HSS", canvas)
-  }, 1)
+  generateResourcePack(hssBoxes, document.getElementById("pack-name").value.trim() || "Fortress HSS")
 });
-document.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
 
 const updateFromCoordString = (text) => {
   const matches = [...text.matchAll(/-?\d+(?:\.\d+)?/g)];
@@ -547,15 +500,12 @@ const updateFromCoordString = (text) => {
   const [x, y, z] = matches.slice(0, 3).map(m => Math.floor(Number(m[0])));
 
   txEl.value = x;
-  tyEl.value = y;
   tzEl.value = z;
 
-  Object.assign(armorStand, { x, y, z });
   panX = x;
   panZ = z;
 
-  saveCoordinates();
-  run();
+  run(x, z);
   requestDraw();
 
   return true;
@@ -582,22 +532,18 @@ document.getElementById('paste-coords').addEventListener('click', async () => {
   }
 });
 
-function run() {
+function run(tx, tz) {
   if (!moduleReady) { setStatus('err', 'wasm not ready yet'); return; }
 
   const version = verEl.value;
   const rawSeed = BigInt(seedEl.value || '0');
-  const tx = parseInt(txEl.value) || 0;
-  const ty = parseInt(tyEl.value) || 0;
-  const tz = parseInt(tzEl.value) || 0;
 
-  setStatus('', `searching HSS… seed=${rawSeed} armor stand=(${tx}, ${ty}, ${tz})`);
+  setStatus('', `searching HSS… seed=${rawSeed}`);
 
   try {
     const result = Module.findFortressHSSRaw(version, rawSeed, tx, tz);
     hssBoxes = parseRawBoxes(result);
 
-    armorStand = { x: tx, y: ty, z: tz };
     panX = tx; panZ = tz;
 
     setStatus(hssBoxes.length === 0 ? 'err' : 'ok',
@@ -618,13 +564,6 @@ function setStatus(cls, msg) {
 
 const savedTheme = localStorage.getItem('theme') || 'dark';
 applyTheme(savedTheme);
-
-const savedTx = localStorage.getItem('tx');
-const savedTy = localStorage.getItem('ty');
-const savedTz = localStorage.getItem('tz');
-if (savedTx !== null) txEl.value = savedTx;
-if (savedTy !== null) tyEl.value = savedTy;
-if (savedTz !== null) tzEl.value = savedTz;
 
 window.addEventListener('resize', resize);
 resize();

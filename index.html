@@ -12,12 +12,13 @@
     --bg-guide: #0f0f0f; --border: #222222; --border-input: #2a2a2a;
     --border-focus: #555555; --text: #c8c8c8; --text-label: #666666;
     --text-input: #e0e0e0; --text-status: #444444; --text-ok: #5a8a5a;
-    --text-err: #8a4a4a; --text-overlay: #444444; --btn-border: #444444;
+    --text-err: #8a4a4a; --text-overlay: #888888; --btn-border: #444444;
     --btn-text: #dddddd; --btn-hover: #1a1a1a; --btn-active: #222222;
     --g-head: #888888; --g-text: #555555; --g-sep: #1e1e1e;
     --g-tag-bg: #1a1a1a; --g-tag: #666666; --ty-color: #666666;
     --ty-border: #1e1e1e; --canvas-bg: #0d0d0d; --grid-chunk: #1a1a1a;
     --grid-region: #262626; --axis: #2a2a2a;
+    --select: #f0b24a; --toggle-on: #49907b;
   }
 
   [data-theme="light"] {
@@ -29,8 +30,9 @@
     --btn-text: #333330; --btn-hover: #ddddd6; --btn-active: #d0cfc8;
     --g-head: #555550; --g-text: #888880; --g-sep: #d0cfc7;
     --g-tag-bg: #ddddd6; --g-tag: #888880; --ty-color: #aaa9a0;
-    --ty-border: #d8d7cf; --canvas-bg: #f2f1ec; --grid-chunk: #e0dfd8;
-    --grid-region: #cccbc3; --axis: #c4c3bb;
+    --ty-border: #d8d7cf; --canvas-bg: #f2f1ec; --grid-chunk: #1a1a1a;
+    --grid-region: #262626; --axis: #2a2a2a;
+    --select: #b96b00; --toggle-on: #2f806d;
   }
 
   body {
@@ -64,27 +66,19 @@
   #toolbar select { width: 90px; }
   #ty { color: var(--ty-color); border-color: var(--ty-border); }
 
-  #toolbar-group {
-    display: flex; gap: 12px;
-  }
-
-  #download, #paste-coords, #theme-toggle {
+  #download, #theme-toggle, #biome-toggle, #clear-selection {
     background: none; border: 1px solid var(--btn-border);
     color: var(--btn-text); font-family: inherit; font-size: 13px;
     cursor: pointer; transition: background 0.15s, border-color 0.15s;
   }
 
-  #pack-name { 
+  #pack-name {
     width: 165px !important;
   }
 
   #download {
     margin-left: auto; padding: 6px 18px;
     letter-spacing: 0.08em; text-transform: uppercase;
-  }
-
-  #paste-coords {
-    padding: 6px 12px; letter-spacing: 0.05em;
   }
 
   @media (max-width: 760px) {
@@ -103,15 +97,11 @@
       width: 100%;
     }
 
-    #toolbar-group {
-        width: 100%;
-    }
-
     #pack-name {
       width: 100% !important;
     }
 
-    #download, #paste-coords, #theme-toggle {
+    #download, #theme-toggle {
       flex: 1 1 100%;
       width: 100%;
       margin-left: 0;
@@ -133,8 +123,50 @@
   #theme-toggle:hover { background: var(--btn-hover); border-color: var(--border-focus); opacity: 1; }
   #download:active, #theme-toggle:active { background: var(--btn-active); }
 
-  #paste-coords:hover { background: var(--btn-hover); border-color: var(--border-focus); }
-  #paste-coords:active { background: var(--btn-active); }
+  #biome-toggle {
+    width: 42px; height: 22px; padding: 2px; border-radius: 999px;
+    border-color: var(--border-input); position: relative;
+  }
+
+  #biome-toggle span {
+    display: block; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--text-label); transition: transform 0.15s, background 0.15s;
+  }
+
+  #biome-toggle[aria-checked="true"] {
+    border-color: var(--toggle-on); background: color-mix(in srgb, var(--toggle-on) 18%, transparent);
+  }
+
+  #biome-toggle[aria-checked="true"] span {
+    background: var(--toggle-on); transform: translateX(18px);
+  }
+
+  #clear-selection {
+    border-color: var(--border-input);
+    font-size: 12px;
+    padding: 3px 8px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  #clear-selection:not(:disabled):hover {
+    background: var(--btn-hover);
+    border-color: var(--border-focus);
+  }
+
+  #clear-selection:not(:disabled):active {
+    background: var(--btn-active);
+  }
+
+  #clear-selection:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  #clear-x {
+    color: var(--text-label);
+    margin-left: 2px;
+  }
 
   #status {
     padding: 4px 16px; font-size: 11px; color: var(--text-status);
@@ -159,12 +191,14 @@
     position: absolute; bottom: 10px; right: 14px;
     font-size: 11px; color: var(--text-overlay);
     pointer-events: none; letter-spacing: 0.05em;
+    background: rgba(0, 0, 0, 0.5); padding: 4px 8px; border-radius: 3px;
   }
 
   #legend {
-    position: absolute; bottom: 10px; left: 14px;
+    position: absolute; bottom: 10px; left: 36px;
     font-size: 11px; color: var(--text-overlay);
     pointer-events: none; line-height: 1.8;
+    background: rgba(0, 0, 0, 0.5); padding: 6px 8px; border-radius: 3px;
   }
 
   #legend span {
@@ -198,6 +232,88 @@
     font-size: 10px; color: var(--g-text); opacity: 0.6;
     line-height: 1.6; margin-top: 6px; font-style: italic;
   }
+
+  #goto-btn {
+    background: none; border: 1px solid var(--border-input);
+    color: var(--btn-text); cursor: pointer;
+    padding: 5px 7px; line-height: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+    align-self: flex-end; margin-bottom: 1px;
+  }
+  #goto-btn:hover { background: var(--btn-hover); border-color: var(--border-focus); }
+  #goto-btn:active { background: var(--btn-active); }
+  #goto-btn[aria-expanded="true"] {
+    border-color: var(--border-focus);
+    background: var(--btn-active);
+  }
+
+  #goto-panel {
+    position: fixed; top: 0; left: 0; z-index: 1000;
+    background: var(--bg-bar); border: 1px solid var(--border);
+    padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 10px;
+    min-width: 280px; max-width: calc(100vw - 16px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    transition: background 0.15s;
+  }
+
+  #goto-panel[hidden] { display: none !important; }
+
+  .goto-row {
+    display: flex; gap: 10px; align-items: flex-end;
+  }
+
+  .goto-label {
+    display: flex; flex-direction: column; gap: 3px;
+    color: var(--text-label); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    flex: 1;
+  }
+
+  .goto-label input {
+    background: var(--bg); border: 1px solid var(--border-input);
+    color: var(--text-input); font-family: inherit; font-size: 13px;
+    padding: 5px 7px; width: 100%; outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .goto-label input:focus { border-color: var(--border-focus); }
+  .goto-label input::-webkit-outer-spin-button,
+  .goto-label input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .goto-label input[type=number] { -moz-appearance: textfield; }
+
+  .goto-actions { gap: 8px; }
+
+  #goto-paste, #goto-go {
+    background: none; border: 1px solid var(--border-input);
+    color: var(--btn-text); font-family: inherit; font-size: 12px;
+    cursor: pointer; padding: 6px 12px; flex: 1;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  #goto-go {
+    border-color: var(--border-focus); letter-spacing: 0.06em;
+    text-transform: uppercase; font-size: 11px;
+  }
+  #goto-paste:hover, #goto-go:hover { background: var(--btn-hover); border-color: var(--border-focus); }
+  #goto-paste:active, #goto-go:active { background: var(--btn-active); }
+
+  #goto-paste.flash-ok  { border-color: var(--text-ok);  color: var(--text-ok); }
+  #goto-paste.flash-err { border-color: var(--text-err); color: var(--text-err); }
+
+  #goto-hint {
+    font-size: 10px; color: var(--text-status); line-height: 1.5;
+  }
+  #goto-hint code {
+    color: var(--text-label); background: var(--bg);
+    padding: 1px 4px; font-family: inherit;
+  }
+  #goto-hint em { font-style: normal; color: var(--text-label); }
+
+  #goto-err {
+    font-size: 11px; color: var(--text-err);
+  }
+  #goto-err[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -215,35 +331,57 @@
   <label>Seed
     <input id="seed" value="0" placeholder="seed">
   </label>
-  <div id="toolbar-group">
-    <label>Target X
-    <input id="tx" type="number" value="0">
-    </label>
-    <label>Target Z
-      <input id="tz" type="number" value="0">
-    </label>
-  </div>
   <label>Pack Name
     <input id="pack-name" value="Fortress HSS Viewer">
   </label>
-  <button id="paste-coords">Paste Coordinates</button>
+  <button id="goto-btn" type="button" title="Pan to coordinates" aria-expanded="false">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+      <circle cx="7.5" cy="7.5" r="2.5"/>
+      <line x1="7.5" y1="1"    x2="7.5" y2="4.5"/>
+      <line x1="7.5" y1="10.5" x2="7.5" y2="14"/>
+      <line x1="1"   y1="7.5"  x2="4.5" y2="7.5"/>
+      <line x1="10.5" y1="7.5" x2="14"  y2="7.5"/>
+    </svg>
+  </button>
+  <label>Selection
+    <button id="clear-selection" type="button" title="Clear selection" disabled><span id="clear-x">Clear </span><span id="selection-info">0</span></button>
+  </label>
+  <label>Biome View
+    <button id="biome-toggle" type="button" role="switch" aria-checked="false" title="Biome overlay"><span></span></button>
+  </label>
   <button id="download">Download</button>
 </div>
 
 <div id="status">ready — loading wasm…</div>
 
 <div id="main">
-
+  <div id="goto-panel" hidden>
+    <div class="goto-row">
+      <label class="goto-label">X
+        <input id="goto-x" type="number" placeholder="0" step="1">
+      </label>
+      <label class="goto-label">Z
+        <input id="goto-z" type="number" placeholder="0" step="1">
+      </label>
+    </div>
+    <div class="goto-row goto-actions">
+      <button id="goto-paste" type="button" title="Paste from X Y Z format (e.g. -151.41 65.80 -15.56)">⧉ Paste XYZ</button>
+      <button id="goto-go" type="button">Go ↗</button>
+    </div>
+    <div id="goto-hint">Paste format: <em>x y z</em> — e.g. <code>-151.41 65.80 -15.56</code></div>
+    <div id="goto-err" hidden></div>
+  </div>
   <div id="viewport">
     <canvas id="c"></canvas>
     <div id="coords"></div>
     <div id="legend">
       <div><span style="background:#3a6b8a"></span>Spawn Spots</div>
       <div><span style="background:#dc3232"></span>Nether Fortress</div>
+      <div><span style="border:2px solid var(--select)"></span>Selected Fortress</div>
     </div>
   </div>
-
 </div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="pack-generator.js"></script>
 <script src="index.js"></script>

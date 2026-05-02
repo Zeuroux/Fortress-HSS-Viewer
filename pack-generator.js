@@ -126,7 +126,7 @@ async function generateResourcePack(hssBoxes, name) {
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${name}.zip`;
+  a.download = `${name}.mcpack`;
   a.click();
 
   URL.revokeObjectURL(url);

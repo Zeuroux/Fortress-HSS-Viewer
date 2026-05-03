@@ -867,12 +867,13 @@ resize();
   function positionPanel() {
     const btnRect = gotoBtn.getBoundingClientRect();
     const MARGIN  = 8, vw = window.innerWidth, vh = window.innerHeight;
+    const wasHidden = gotoPanel.hidden;
     gotoPanel.style.left = '-9999px';
     gotoPanel.style.top  = '-9999px';
     gotoPanel.hidden = false;
     const panelW = gotoPanel.offsetWidth;
     const panelH = gotoPanel.offsetHeight;
-    gotoPanel.hidden = true;
+    gotoPanel.hidden = wasHidden; // restore — don't always force-hide
     let top  = btnRect.bottom + 6;
     let left = btnRect.left;
     if (top + panelH > vh - MARGIN) top = btnRect.top - panelH - 6;
@@ -886,7 +887,9 @@ resize();
     positionPanel();
     gotoPanel.hidden = false;
     gotoBtn.setAttribute('aria-expanded', 'true');
-    gotoX.focus(); gotoX.select();
+    // Skip auto-focus on touch — it opens the keyboard which fires a resize
+    // event; on desktop the focus is still useful for keyboard navigation
+    if (!window.matchMedia('(hover: none)').matches) { gotoX.focus(); gotoX.select(); }
   }
 
   function closePanel() {

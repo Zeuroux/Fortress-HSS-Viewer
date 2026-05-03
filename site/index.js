@@ -5,13 +5,25 @@ const seedEl = document.getElementById('seed');
 const status = document.getElementById('status');
 const coords = document.getElementById('coords');
 const biomeToggle = document.getElementById('biome-toggle');
-const selectionInfo = document.getElementById('selection-info');
 const clearSelectionBtn = document.getElementById('clear-selection');
+
+const CSS_PROPS = [
+  '--canvas-bg','--grid-chunk','--grid-region','--axis',
+  '--bg-status','--border-input','--text-overlay','--select','--ruler-size'
+];
+
+let _tv = {};
+function refreshCssVars() {
+  const s = getComputedStyle(html);
+  for (const p of CSS_PROPS) _tv[p] = s.getPropertyValue(p).trim();
+  _tv.rulerSize = parseInt(_tv['--ruler-size']) || 24;
+}
 
 function applyTheme(t) {
   html.setAttribute('data-theme', t);
   localStorage.setItem('theme', t);
   themeBtn.textContent = t === 'dark' ? '☽' : '☀';
+  refreshCssVars();
   requestDraw();
 }
 
@@ -20,8 +32,9 @@ themeBtn.addEventListener('click', () => {
 });
 
 function cssVar(name) {
-  return getComputedStyle(html).getPropertyValue(name).trim();
+  return _tv[name] || getComputedStyle(html).getPropertyValue(name).trim();
 }
+
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -32,7 +45,7 @@ let hssBoxes = [];
 let biomeChunks = new Map();
 let selectedFortresses = new Map();
 let hoveredFortressId = null;
-let biomeOverlayEnabled = false;
+let biomeOverlayEnabled = true;
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 64;
@@ -62,6 +75,8 @@ let lastBiomeFetchKey = null;
 let biomeCacheBaseKey = null;
 let biomeWorker = null;
 let biomeRequestId = 0;
+let lastBiomeFetchTime = 0;
+const BIOME_FETCH_INTERVAL = 150;
 
 let rafPending = false;
 function requestDraw() {
@@ -71,19 +86,46 @@ function requestDraw() {
   }
 }
 
+function rgba(hex, alpha) {
+  const c = hex.replace('#', '');
+  return `rgba(${parseInt(c.slice(0,2),16)},${parseInt(c.slice(2,4),16)},${parseInt(c.slice(4,6),16)},${alpha})`;
+}
+
+function biomeName(id) {
+  return BIOME_STYLE[id]?.name || `biome ${id}`;
+}
+
+function updateSelectionInfo() {
+  const count = selectedFortresses.size;
+  clearSelectionBtn.title = count > 0 ? `Clear Selection (${count})` : 'Clear Selection';
+  clearSelectionBtn.disabled = count === 0;
+}
+
 let lastFetchedBounds = null;
 function invalidateFetchBounds() { lastFetchedBounds = null; }
 
-function resize() {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  canvas.width  = Math.max(1, Math.floor(canvas.clientWidth  * dpr));
-  canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+function invalidateBiomeFetch(clearCache = false) {
+  lastBiomeFetchKey = null;
+  lastBiomeLookupKey = '';
+  lastBiomeLookupResult = null;
+  if (clearCache) {
+    biomeChunks.clear();
+    biomeCacheBaseKey = null;
+    cancelBiomeWorkerJobs();
+  }
+}
+
+function refreshAll(clearCache = false, immediate = false) {
   invalidateFetchBounds();
-  invalidateBiomeFetch();
+  invalidateBiomeFetch(clearCache);
   requestDraw();
-  scheduleFetch();
-  scheduleBiomeFetch();
+  if (immediate) {
+    fetchVisibleBoxes();
+    fetchVisibleBiomes();
+  } else {
+    scheduleFetch();
+    scheduleBiomeFetch();
+  }
 }
 
 function worldToCanvas(wx, wz) {
@@ -100,38 +142,23 @@ function canvasToWorld(cx, cy) {
   };
 }
 
-function biomeName(id) {
-  return BIOME_STYLE[id]?.name || `biome ${id}`;
-}
-
-function rgba(hex, alpha) {
-  const c = hex.replace('#', '');
-  return `rgba(${parseInt(c.slice(0,2),16)},${parseInt(c.slice(2,4),16)},${parseInt(c.slice(4,6),16)},${alpha})`;
-}
-
-function updateSelectionInfo() {
-  const count = selectedFortresses.size;
-  selectionInfo.textContent = `${count}`;
-  clearSelectionBtn.disabled = count === 0;
-}
-
-function invalidateBiomeFetch(clearCache = false) {
-  lastBiomeFetchKey = null;
-  if (clearCache) {
-    biomeChunks.clear();
-    biomeCacheBaseKey = null;
-    cancelBiomeWorkerJobs();
-  }
+function resize() {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width  = Math.max(1, Math.floor(canvas.clientWidth  * dpr));
+  canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  refreshCssVars();
+  refreshAll();
 }
 
 function getFortressScreenHitBox(fortress) {
-  const pad = 6;
-  const a = worldToCanvas(fortress.minX - pad, fortress.minZ - pad);
-  const b = worldToCanvas(fortress.maxX + pad, fortress.maxZ + pad);
-  let x = Math.min(a.cx, b.cx);
-  let y = Math.min(a.cy, b.cy);
-  let w = Math.abs(b.cx - a.cx);
-  let h = Math.abs(b.cy - a.cy);
+  const hw = canvas.clientWidth / 2, hh = canvas.clientHeight / 2;
+  const ax = hw + (fortress.minX - 0.5 - panX) * scale;
+  const ay = hh + (fortress.minZ - 0.5 - panZ) * scale;
+  const bx = hw + (fortress.maxX - 0.5 - panX) * scale;
+  const by = hh + (fortress.maxZ - 0.5 - panZ) * scale;
+  let x = Math.min(ax, bx), y = Math.min(ay, by);
+  let w = Math.abs(bx - ax), h = Math.abs(by - ay);
   const minSize = 28;
   if (w < minSize) { x -= (minSize - w) / 2; w = minSize; }
   if (h < minSize) { y -= (minSize - h) / 2; h = minSize; }
@@ -144,8 +171,10 @@ function hitTestFortress(offsetX, offsetY) {
     const box = getFortressScreenHitBox(fortress);
     if (offsetX < box.x || offsetX > box.x + box.w ||
         offsetY < box.y || offsetY > box.y + box.h) continue;
-    const center = worldToCanvas(fortress.x, fortress.z);
-    const d = Math.hypot(offsetX - center.cx, offsetY - center.cy);
+    const hw = canvas.clientWidth / 2, hh = canvas.clientHeight / 2;
+    const cx = hw + (fortress.x - panX) * scale;
+    const cy = hh + (fortress.z - panZ) * scale;
+    const d = Math.hypot(offsetX - cx, offsetY - cy);
     if (d < bestDist) { best = fortress; bestDist = d; }
   }
   return best;
@@ -179,12 +208,12 @@ function drawGridPass(tl, br, W, H, step, strokeStyle, lineWidth, skipStep = 0) 
   ctx.beginPath();
   for (let gx = gridStart(tl.wx, step); gx <= br.wx; gx += step) {
     if (skipStep && isGridMultiple(gx, skipStep)) continue;
-    const { cx } = worldToCanvas(gx, 0);
+    const cx = W / 2 + (gx - panX) * scale;
     ctx.moveTo(cx, 0); ctx.lineTo(cx, H);
   }
   for (let gz = gridStart(tl.wz, step); gz <= br.wz; gz += step) {
     if (skipStep && isGridMultiple(gz, skipStep)) continue;
-    const { cy } = worldToCanvas(0, gz);
+    const cy = H / 2 + (gz - panZ) * scale;
     ctx.moveTo(0, cy); ctx.lineTo(W, cy);
   }
   ctx.stroke();
@@ -204,12 +233,14 @@ function drawAdaptiveGrid(tl, br, W, H, colGridChunk, colGridRegion) {
 
 function drawBiomeOverlay(W, H) {
   if (!biomeOverlayEnabled || !biomeChunks.size) return;
+  const hw = W / 2, hh = H / 2;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   for (const chunk of biomeChunks.values()) {
-    const { cx, cy } = worldToCanvas(chunk.originX - 0.5, chunk.originZ - 0.5);
+    const cx = hw + (chunk.originX - 0.5 - panX) * scale;
+    const cy = hh + (chunk.originZ - 0.5 - panZ) * scale;
     const w = chunk.columns * chunk.step * scale;
-    const h = chunk.rows    * chunk.step * scale;
+    const h = chunk.rows * chunk.step * scale;
     if (cx + w < 0 || cx > W || cy + h < 0 || cy > H) continue;
     ctx.drawImage(chunk.canvas, cx, cy, w, h);
   }
@@ -218,7 +249,7 @@ function drawBiomeOverlay(W, H) {
 
 function drawFortressHitBoxes(W, H) {
   if (!fortresses.length) return;
-  const colSelect = cssVar('--select');
+  const colSelect = _tv['--select'];
   ctx.save();
   for (const fortress of fortresses) {
     const box = getFortressScreenHitBox(fortress);
@@ -239,9 +270,13 @@ function drawFortressHitBoxes(W, H) {
 function drawBoxLayer(boxes, pxOffset, fillStyle, strokeStyle) {
   if (!boxes.length) return;
   const W = canvas.clientWidth, H = canvas.clientHeight;
+  const hw = W / 2, hh = H / 2;
   const rects = [];
   for (const b of boxes) {
-    const { cx, cy } = worldToCanvas(b.px + pxOffset - b.sx / 2, b.pz + pxOffset - b.sz / 2);
+    const wx = b.px + pxOffset - b.sx / 2;
+    const wz = b.pz + pxOffset - b.sz / 2;
+    const cx = hw + (wx - panX) * scale;
+    const cy = hh + (wz - panZ) * scale;
     const pw = b.sx * scale, ph = b.sz * scale;
     if (cx + pw >= 0 && cx <= W && cy + ph >= 0 && cy <= H) rects.push(cx, cy, pw, ph);
   }
@@ -260,14 +295,14 @@ function drawBoxLayer(boxes, pxOffset, fillStyle, strokeStyle) {
 function draw() {
   if (!ctx) return;
   const W = canvas.clientWidth, H = canvas.clientHeight;
-
-  const colCanvasBg    = cssVar('--canvas-bg');
-  const colGridChunk   = cssVar('--grid-chunk');
-  const colGridRegion  = cssVar('--grid-region');
-  const colAxis        = cssVar('--axis');
-  const colBgStatus    = cssVar('--bg-status');
-  const colBorderInput = cssVar('--border-input');
-  const colTextOverlay = cssVar('--text-overlay');
+  const colCanvasBg    = _tv['--canvas-bg'];
+  const colGridChunk   = _tv['--grid-chunk'];
+  const colGridRegion  = _tv['--grid-region'];
+  const colAxis        = _tv['--axis'];
+  const colBgStatus    = _tv['--bg-status'];
+  const colBorderInput = _tv['--border-input'];
+  const colTextOverlay = _tv['--text-overlay'];
+  const RULER          = _tv.rulerSize;
 
   ctx.fillStyle = colCanvasBg;
   ctx.fillRect(0, 0, W, H);
@@ -277,72 +312,86 @@ function draw() {
   const br = canvasToWorld(W, H);
   drawAdaptiveGrid(tl, br, W, H, colGridChunk, colGridRegion);
 
-  const origin = worldToCanvas(0, 0);
+  const ox = W / 2 - panX * scale;
+  const oz = H / 2 - panZ * scale;
   ctx.strokeStyle = colAxis; ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(origin.cx, 0); ctx.lineTo(origin.cx, H);
-  ctx.moveTo(0, origin.cy); ctx.lineTo(W, origin.cy);
+  ctx.moveTo(ox, 0); ctx.lineTo(ox, H);
+  ctx.moveTo(0, oz); ctx.lineTo(W, oz);
   ctx.stroke();
 
   drawBoxLayer(autoBoxes, -0.5, 'rgba(220,50,50,0.3)',    '#dc3232');
   drawBoxLayer(hssBoxes,   0,   'rgba(58,107,138,0.25)', '#3a6b8a');
-
   drawFortressHitBoxes(W, H);
 
-  const RULER_SIZE = 24;
   const tickStep  = Math.max(1, Math.min(256, Math.floor(50 / scale)));
-  const labelStep = tickStep <= 16 ? 16 : tickStep;
+  const labelStep = scale >= 8 ? Math.max(1, Math.ceil(36 / scale)) : (tickStep <= 16 ? 16 : tickStep);
   const rulerCx0  = gridStart(tl.wx, tickStep);
   const rulerCz0  = gridStart(tl.wz, tickStep);
-
+  const fontSize = Math.max(9, RULER - 14);
+  ctx.font = `${fontSize}px monospace`;
+  const zCandidates = [
+    Math.round(tl.wz + 0.5),
+    Math.round(br.wz + 0.5),
+  ];
+  const longestZStr = zCandidates.reduce(
+    (best, z) => String(z).length >= String(best).length ? z : best
+  );
+  const zLabelPx = ctx.measureText(String(longestZStr)).width;
+  const zRulerW = Math.max(RULER, Math.ceil(zLabelPx) + 12);
   ctx.fillStyle = colBgStatus;
-  ctx.fillRect(0, 0, W, RULER_SIZE);
-  ctx.fillRect(0, 0, RULER_SIZE, H);
+  ctx.fillRect(0, 0, W, RULER);
+  ctx.fillRect(0, 0, zRulerW, H);
+
   ctx.strokeStyle = colBorderInput; ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(RULER_SIZE, RULER_SIZE - 0.5); ctx.lineTo(W, RULER_SIZE - 0.5);
-  ctx.moveTo(RULER_SIZE - 0.5, RULER_SIZE); ctx.lineTo(RULER_SIZE - 0.5, H);
+  ctx.moveTo(zRulerW, RULER - 0.5); ctx.lineTo(W, RULER - 0.5);
+  ctx.moveTo(zRulerW - 0.5, RULER); ctx.lineTo(zRulerW - 0.5, H);
   ctx.stroke();
 
   ctx.fillStyle = colTextOverlay;
-  ctx.font = '11px monospace';
+  ctx.font = `${fontSize}px monospace`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+
   ctx.beginPath();
   for (let gx = rulerCx0; gx <= br.wx; gx += tickStep) {
-    const { cx } = worldToCanvas(gx, 0);
-    if (cx < RULER_SIZE || cx > W) continue;
-    ctx.moveTo(cx, RULER_SIZE - (Math.round(gx + 0.5) % 256 === 0 ? 10 : 6));
-    ctx.lineTo(cx, RULER_SIZE);
+    const cx = W / 2 + (gx - panX) * scale;
+    if (cx < zRulerW || cx > W) continue;
+    const worldX = Math.round(gx + 0.5);
+    ctx.moveTo(cx, RULER - (worldX % 256 === 0 ? 10 : 6));
+    ctx.lineTo(cx, RULER);
   }
   ctx.stroke();
+
   for (let gx = rulerCx0; gx <= br.wx; gx += tickStep) {
-    const { cx } = worldToCanvas(gx, 0);
-    if (cx < RULER_SIZE || cx > W) continue;
+    const cx = W / 2 + (gx - panX) * scale;
+    if (cx < zRulerW + 10 || cx > W) continue;
     const worldX = Math.round(gx + 0.5);
     if (worldX % labelStep === 0) ctx.fillText(`${worldX}`, cx, 2);
   }
 
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+
   ctx.beginPath();
   for (let gz = rulerCz0; gz <= br.wz; gz += tickStep) {
-    const { cy } = worldToCanvas(0, gz);
-    if (cy < RULER_SIZE || cy > H) continue;
-    ctx.moveTo(RULER_SIZE - (Math.round(gz + 0.5) % 256 === 0 ? 10 : 6), cy);
-    ctx.lineTo(RULER_SIZE, cy);
+    const cy = H / 2 + (gz - panZ) * scale;
+    if (cy < RULER || cy > H) continue;
+    const worldZ = Math.round(gz + 0.5);
+    ctx.moveTo(zRulerW - (worldZ % 256 === 0 ? 10 : 6), cy);
+    ctx.lineTo(zRulerW, cy);
   }
   ctx.stroke();
+
   for (let gz = rulerCz0; gz <= br.wz; gz += tickStep) {
-    const { cy } = worldToCanvas(0, gz);
-    if (cy < RULER_SIZE || cy > H) continue;
+    const cy = H / 2 + (gz - panZ) * scale;
+    if (cy < RULER + 5 || cy > H) continue;
     const worldZ = Math.round(gz + 0.5);
-    if (worldZ % labelStep === 0) ctx.fillText(`${worldZ}`, RULER_SIZE - 4, cy);
+    if (worldZ % labelStep === 0) ctx.fillText(`${worldZ}`, zRulerW - 4, cy);
   }
-
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('X', W - 18, 2);
-  ctx.fillText('Z', 2, RULER_SIZE + 2);
+  ctx.fillText('X', zRulerW - fontSize - 2, 2);
+  ctx.fillText('Z', 2, RULER - fontSize - 2);
 }
-
 function fetchVisibleBoxes() {
   if (!moduleReady || isFetching) return;
   const version   = verEl.value;
@@ -541,9 +590,17 @@ function handleBiomeWorkerMessage(e) {
 }
 
 function scheduleBiomeFetch() {
-  if (!biomeOverlayEnabled) return;
   if (biomeFetchTimeout) clearTimeout(biomeFetchTimeout);
-  biomeFetchTimeout = setTimeout(fetchVisibleBiomes, 150);
+  const elapsed = performance.now() - lastBiomeFetchTime;
+  if (elapsed >= BIOME_FETCH_INTERVAL) {
+    lastBiomeFetchTime = performance.now();
+    fetchVisibleBiomes();
+  } else {
+    biomeFetchTimeout = setTimeout(() => {
+      lastBiomeFetchTime = performance.now();
+      fetchVisibleBiomes();
+    }, BIOME_FETCH_INTERVAL - elapsed);
+  }
 }
 
 function fetchVisibleBiomes() {
@@ -585,25 +642,33 @@ const getPointerOffset = e => {
   return { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
 };
 
+let lastBiomeLookupKey = '';
+let lastBiomeLookupResult = null;
+
+function getBiomeAtCoord(blockX, blockZ) {
+  const key = `${blockX},${blockZ}`;
+  if (key === lastBiomeLookupKey) return lastBiomeLookupResult;
+  lastBiomeLookupKey = key;
+  if (!moduleReady) { lastBiomeLookupResult = null; return null; }
+  try {
+    const result = Module.findNetherBiomeTilesRaw(verEl.value, BigInt(seedEl.value || '0'), blockX, blockZ, 1, 1, 1);
+    if (result.ptr && result.count > 0) {
+      const biomeId = Math.round(new Float32Array(Module.HEAPF32.buffer, Number(result.ptr), 1)[0]);
+      Module.freeBuffer(result.ptr);
+      lastBiomeLookupResult = biomeId;
+      return biomeId;
+    }
+  } catch {}
+  lastBiomeLookupResult = null;
+  return null;
+}
+
 function updateCoordsFromEvent(e) {
   const { offsetX, offsetY } = getPointerOffset(e);
   const { wx, wz } = canvasToWorld(offsetX, offsetY);
   const blockX = Math.round(wx), blockZ = Math.round(wz);
   const biomeId = getBiomeAtCoord(blockX, blockZ);
   coords.textContent = `X ${blockX}  Z ${blockZ}${biomeId != null ? `  ${biomeName(biomeId)}` : ''}`;
-}
-
-function getBiomeAtCoord(blockX, blockZ) {
-  if (!moduleReady) return null;
-  try {
-    const result = Module.findNetherBiomeTilesRaw(verEl.value, BigInt(seedEl.value || '0'), blockX, blockZ, 1, 1, 1);
-    if (result.ptr && result.count > 0) {
-      const biomeId = Math.round(new Float32Array(Module.HEAPF32.buffer, Number(result.ptr), 1)[0]);
-      Module.freeBuffer(result.ptr);
-      return biomeId;
-    }
-  } catch {}
-  return null;
 }
 
 function setPointerDrag(e) {
@@ -801,11 +866,7 @@ function resetWorldData() {
   selectedFortresses.clear();
   hoveredFortressId = null;
   updateSelectionInfo();
-  invalidateFetchBounds();
-  invalidateBiomeFetch(true);
-  requestDraw();
-  scheduleFetch();
-  scheduleBiomeFetch();
+  refreshAll(true);
 }
 
 seedEl.addEventListener('input', () => { resetWorldData(); scheduleUrlUpdate(); });
@@ -818,6 +879,9 @@ document.getElementById('download').addEventListener('click', () => {
 biomeToggle.addEventListener('click', () => {
   biomeOverlayEnabled = !biomeOverlayEnabled;
   biomeToggle.setAttribute('aria-checked', String(biomeOverlayEnabled));
+  biomeToggle.textContent = biomeOverlayEnabled ? '▩' : '⬚';
+  biomeToggle.style.color = biomeOverlayEnabled ? 'var(--toggle-on)' : 'var(--btn-text)';
+  biomeToggle.style.borderColor = biomeOverlayEnabled ? 'var(--toggle-on)' : 'var(--btn-border)';
   if (biomeOverlayEnabled) scheduleBiomeFetch(); else cancelBiomeWorkerJobs();
   requestDraw();
 });
@@ -867,13 +931,23 @@ resize();
   function positionPanel() {
     const btnRect = gotoBtn.getBoundingClientRect();
     const MARGIN  = 8, vw = window.innerWidth, vh = window.innerHeight;
+
+    if (vw <= 480) {
+      gotoPanel.style.left = `${MARGIN}px`;
+      gotoPanel.style.top = 'auto';
+      gotoPanel.style.bottom = `${MARGIN + parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)') || '0')}px`;
+      gotoPanel.hidden = false;
+      return;
+    }
+
     const wasHidden = gotoPanel.hidden;
     gotoPanel.style.left = '-9999px';
     gotoPanel.style.top  = '-9999px';
+    gotoPanel.style.bottom = '';
     gotoPanel.hidden = false;
     const panelW = gotoPanel.offsetWidth;
     const panelH = gotoPanel.offsetHeight;
-    gotoPanel.hidden = wasHidden; // restore — don't always force-hide
+    gotoPanel.hidden = wasHidden;
     let top  = btnRect.bottom + 6;
     let left = btnRect.left;
     if (top + panelH > vh - MARGIN) top = btnRect.top - panelH - 6;
@@ -887,8 +961,6 @@ resize();
     positionPanel();
     gotoPanel.hidden = false;
     gotoBtn.setAttribute('aria-expanded', 'true');
-    // Skip auto-focus on touch — it opens the keyboard which fires a resize
-    // event; on desktop the focus is still useful for keyboard navigation
     if (!window.matchMedia('(hover: none)').matches) { gotoX.focus(); gotoX.select(); }
   }
 
@@ -908,11 +980,7 @@ resize();
     if (!isFinite(x) || !isFinite(z)) { showErr('Invalid coordinates.'); return; }
     gotoErr.hidden = true;
     panX = x; panZ = z;
-    invalidateFetchBounds();
-    invalidateBiomeFetch();
-    requestDraw();
-    fetchVisibleBoxes();
-    scheduleBiomeFetch();
+    refreshAll(false, true);
     closePanel();
   }
 
@@ -934,14 +1002,14 @@ resize();
       const m    = XYZ_RE.exec(text);
       if (!m) {
         flashBtn('flash-err');
-        showErr("Clipboard doesn't match format: x y z (e.g. -151.41 65.80 -15.56)");
+        showErr("Clipboard doesn't match format: x y z");
         return;
       }
       gotoX.value = Math.floor(parseFloat(m[1]));
       gotoZ.value = Math.floor(parseFloat(m[3]));
       flashBtn('flash-ok');
     } catch {
-      showErr('Clipboard read failed — paste manually into the fields.');
+      showErr('Clipboard read failed.');
       flashBtn('flash-err');
     }
   });

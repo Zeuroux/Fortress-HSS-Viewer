@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Fortress HSS</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,6 +19,10 @@
     --ty-border: #1e1e1e; --canvas-bg: #0d0d0d; --grid-chunk: #1a1a1a;
     --grid-region: #262626; --axis: #2a2a2a;
     --select: #f0b24a; --toggle-on: #49907b;
+    --ruler-size: 24;
+    --toolbar-gap: 12px;
+    --toolbar-px: 16px;
+    --btn-size: 30px;
   }
 
   [data-theme="light"] {
@@ -30,21 +34,22 @@
     --btn-text: #333330; --btn-hover: #ddddd6; --btn-active: #d0cfc8;
     --g-head: #555550; --g-text: #888880; --g-sep: #d0cfc7;
     --g-tag-bg: #ddddd6; --g-tag: #888880; --ty-color: #aaa9a0;
-    --ty-border: #d8d7cf; --canvas-bg: #f2f1ec; --grid-chunk: #1a1a1a;
-    --grid-region: #262626; --axis: #2a2a2a;
-    --select: #b96b00; --toggle-on: #2f806d;
+    --ty-border: #d8d7cf; --canvas-bg: #f2f1ec; --toggle-on: #2f806d;
   }
 
   body {
     background: var(--bg); color: var(--text);
     font-family: 'Courier New', monospace; font-size: 13px;
-    display: flex; flex-direction: column; height: 100vh;
+    display: flex; flex-direction: column; height: 100dvh;
     overflow: hidden; transition: background 0.15s, color 0.15s;
   }
 
   #toolbar {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px; background: var(--bg-bar);
+    display: flex; align-items: center; gap: var(--toolbar-gap);
+    padding: var(--toolbar-px);
+    padding-top: calc(var(--toolbar-px) + env(safe-area-inset-top, 0px));
+    padding-left: calc(var(--toolbar-px) + env(safe-area-inset-left, 0px));
+    background: var(--bg-bar);
     border-bottom: 1px solid var(--border); flex-wrap: wrap;
     flex-shrink: 0; transition: background 0.15s;
   }
@@ -64,112 +69,53 @@
 
   #toolbar input:focus, #toolbar select:focus { border-color: var(--border-focus); }
   #toolbar select { width: 90px; }
-  #ty { color: var(--ty-color); border-color: var(--ty-border); }
 
-  #download, #theme-toggle, #biome-toggle, #clear-selection {
-    background: none; border: 1px solid var(--btn-border);
-    color: var(--btn-text); font-family: inherit; font-size: 13px;
-    cursor: pointer; transition: background 0.15s, border-color 0.15s;
-  }
-
-  #pack-name {
-    width: 165px !important;
-  }
-
-  #download {
-    margin-left: auto; padding: 6px 18px;
-    letter-spacing: 0.08em; text-transform: uppercase;
-  }
-
-  @media (max-width: 760px) {
-    #toolbar {
-      gap: 8px;
-      padding: 10px 10px;
-    }
-
-    #toolbar label {
-      flex: 1 1 140px;
-      min-width: 0;
-      width: 100%;
-    }
-
-    #toolbar input, #toolbar select {
-      width: 100%;
-    }
-
-    #pack-name {
-      width: 100% !important;
-    }
-
-    #download, #theme-toggle {
-      flex: 1 1 100%;
-      width: 100%;
-      margin-left: 0;
-      padding: 10px 12px;
-    }
-
-    #status {
-      font-size: 12px;
-      padding: 8px 12px;
-    }
-  }
-
-  #theme-toggle {
-    padding: 5px 9px; font-size: 15px;
-    border-color: var(--border-input); opacity: 0.65;
-  }
-
-  #download:hover { background: var(--btn-hover); border-color: var(--border-focus); }
-  #theme-toggle:hover { background: var(--btn-hover); border-color: var(--border-focus); opacity: 1; }
-  #download:active, #theme-toggle:active { background: var(--btn-active); }
-
-  #biome-toggle {
-    width: 42px; height: 22px; padding: 2px; border-radius: 999px;
-    border-color: var(--border-input); position: relative;
-  }
-
-  #biome-toggle span {
-    display: block; width: 16px; height: 16px; border-radius: 50%;
-    background: var(--text-label); transition: transform 0.15s, background 0.15s;
-  }
-
-  #biome-toggle[aria-checked="true"] {
-    border-color: var(--toggle-on); background: color-mix(in srgb, var(--toggle-on) 18%, transparent);
-  }
-
-  #biome-toggle[aria-checked="true"] span {
-    background: var(--toggle-on); transform: translateX(18px);
-  }
-
-  #clear-selection {
-    border-color: var(--border-input);
-    font-size: 12px;
-    padding: 3px 8px;
-    letter-spacing: 0.04em;
+  button {
+    background: var(--bg-bar);
+    border: 1px solid var(--btn-border);
+    color: var(--btn-text);
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 5px 9px;
+    opacity: 0.75;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--btn-size);
+    height: var(--btn-size);
     white-space: nowrap;
+    border-radius: 2px;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  #clear-selection:not(:disabled):hover {
+  button:hover:not(:disabled) {
     background: var(--btn-hover);
     border-color: var(--border-focus);
+    opacity: 1;
+    color: var(--text-input);
   }
 
-  #clear-selection:not(:disabled):active {
+  button:active:not(:disabled) {
     background: var(--btn-active);
+    transform: translateY(1px);
   }
 
-  #clear-selection:disabled {
-    opacity: 0.4;
-    cursor: default;
+  button:disabled { opacity: 0.3; cursor: default; }
+
+  .btn-icon {
+    width: var(--btn-size);
+    height: var(--btn-size);
+    padding: 0;
   }
 
-  #clear-x {
-    color: var(--text-label);
-    margin-left: 2px;
-  }
+  #download { margin-left: auto; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0 12px; }
 
   #status {
-    padding: 4px 16px; font-size: 11px; color: var(--text-status);
+    padding: 4px var(--toolbar-px);
+    padding-left: calc(var(--toolbar-px) + env(safe-area-inset-left, 0px));
+    font-size: 11px; color: var(--text-status);
     background: var(--bg-status); border-bottom: 1px solid var(--border);
     min-height: 22px; letter-spacing: 0.03em;
     flex-shrink: 0; transition: background 0.15s;
@@ -188,64 +134,28 @@
   canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 
   #coords {
-    position: absolute; bottom: 10px; right: 14px;
+    position: absolute;
+    top: 30px;
+    right: 14px;
     font-size: 11px; color: var(--text-overlay);
     pointer-events: none; letter-spacing: 0.05em;
     background: rgba(0, 0, 0, 0.5); padding: 4px 8px; border-radius: 3px;
   }
 
   #legend {
-    position: absolute; bottom: 10px; left: 36px;
+    position: absolute; bottom: 10px;
+    left: 30px;
     font-size: 11px; color: var(--text-overlay);
     pointer-events: none; line-height: 1.8;
     background: rgba(0, 0, 0, 0.5); padding: 6px 8px; border-radius: 3px;
+    max-width: calc(100vw - var(--ruler-size) - 80px);
+    overflow: hidden; text-overflow: ellipsis;
   }
 
   #legend span {
     display: inline-block; width: 10px; height: 10px;
     margin-right: 6px; vertical-align: middle;
-  }
-
-  .g-section { margin-bottom: 0; }
-  .g-section + .g-section { border-top: 1px solid var(--g-sep); padding-top: 16px; margin-top: 16px; }
-  .g-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--g-head); margin-bottom: 9px; }
-  .g-body { font-size: 11px; color: var(--g-text); line-height: 1.75; }
-  .g-body p              { margin-bottom: 6px; }
-  .g-body p:last-child   { margin-bottom: 0; }
-
-  .g-row {
-    display: flex; justify-content: space-between; align-items: baseline;
-    padding: 4px 0; border-bottom: 1px solid var(--g-sep);
-    font-size: 11px; gap: 8px;
-  }
-
-  .g-row:last-child { border-bottom: none; }
-  .g-key { color: var(--g-text); flex-shrink: 0; }
-  .g-val { color: var(--g-head); text-align: right; word-break: break-all; }
-
-  .g-tag {
-    display: inline-block; background: var(--g-tag-bg); color: var(--g-tag);
-    font-size: 10px; padding: 2px 7px; margin: 2px 2px 2px 0; letter-spacing: 0.04em;
-  }
-
-  .g-note {
-    font-size: 10px; color: var(--g-text); opacity: 0.6;
-    line-height: 1.6; margin-top: 6px; font-style: italic;
-  }
-
-  #goto-btn {
-    background: none; border: 1px solid var(--border-input);
-    color: var(--btn-text); cursor: pointer;
-    padding: 5px 7px; line-height: 0;
-    display: inline-flex; align-items: center; justify-content: center;
-    transition: background 0.15s, border-color 0.15s;
-    align-self: flex-end; margin-bottom: 1px;
-  }
-  #goto-btn:hover { background: var(--btn-hover); border-color: var(--border-focus); }
-  #goto-btn:active { background: var(--btn-active); }
-  #goto-btn[aria-expanded="true"] {
-    border-color: var(--border-focus);
-    background: var(--btn-active);
+    flex-shrink: 0;
   }
 
   #goto-panel {
@@ -259,9 +169,7 @@
 
   #goto-panel[hidden] { display: none !important; }
 
-  .goto-row {
-    display: flex; gap: 10px; align-items: flex-end;
-  }
+  .goto-row { display: flex; gap: 10px; align-items: flex-end; }
 
   .goto-label {
     display: flex; flex-direction: column; gap: 3px;
@@ -272,54 +180,99 @@
 
   .goto-label input {
     background: var(--bg); border: 1px solid var(--border-input);
-    color: var(--text-input); font-family: inherit; font-size: 13px;
-    padding: 5px 7px; width: 100%; outline: none;
+    color: var(--text-input); font-family: inherit; font-size: 16px;
+    padding: 8px 7px; width: 100%; outline: none;
     transition: border-color 0.15s, background 0.15s;
   }
 
   .goto-label input:focus { border-color: var(--border-focus); }
-  .goto-label input::-webkit-outer-spin-button,
-  .goto-label input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  .goto-label input[type=number] { -moz-appearance: textfield; }
 
   .goto-actions { gap: 8px; }
+  .goto-actions button { min-height: 38px; }
 
-  #goto-paste, #goto-go {
-    background: none; border: 1px solid var(--border-input);
-    color: var(--btn-text); font-family: inherit; font-size: 12px;
-    cursor: pointer; padding: 6px 12px; flex: 1;
-    transition: background 0.15s, border-color 0.15s;
-    white-space: nowrap;
-  }
-  #goto-go {
-    border-color: var(--border-focus); letter-spacing: 0.06em;
-    text-transform: uppercase; font-size: 11px;
-  }
-  #goto-paste:hover, #goto-go:hover { background: var(--btn-hover); border-color: var(--border-focus); }
-  #goto-paste:active, #goto-go:active { background: var(--btn-active); }
+  #goto-paste.flash-ok  { border-color: var(--text-ok);  color: var(--text-ok); opacity: 1; }
+  #goto-paste.flash-err { border-color: var(--text-err); color: var(--text-err); opacity: 1; }
 
-  #goto-paste.flash-ok  { border-color: var(--text-ok);  color: var(--text-ok); }
-  #goto-paste.flash-err { border-color: var(--text-err); color: var(--text-err); }
-
-  #goto-hint {
-    font-size: 10px; color: var(--text-status); line-height: 1.5;
-  }
-  #goto-hint code {
-    color: var(--text-label); background: var(--bg);
-    padding: 1px 4px; font-family: inherit;
-  }
+  #goto-hint { font-size: 10px; color: var(--text-status); line-height: 1.5; }
+  #goto-hint code { color: var(--text-label); background: var(--bg); padding: 1px 4px; font-family: inherit; }
   #goto-hint em { font-style: normal; color: var(--text-label); }
-
-  #goto-err {
-    font-size: 11px; color: var(--text-err);
-  }
+  #goto-err { font-size: 11px; color: var(--text-err); }
   #goto-err[hidden] { display: none; }
+
+  @media (max-width: 768px) {
+    :root {
+      --ruler-size: 20;
+      --toolbar-gap: 8px;
+      --toolbar-px: 10px;
+      --btn-size: 34px;
+    }
+    #toolbar label { flex: 1 1 120px; min-width: 0; }
+    #toolbar input, #toolbar select { width: 100%; }
+    #toolbar select { width: 100%; }
+    #pack-name { width: 100% !important; }
+    #download { flex: 1 1 100%; width: 100%; margin-left: 0; padding: 10px 12px; }
+    #status { font-size: 12px; }
+    button { font-size: 15px; }
+    #goto-panel { min-width: 260px; }
+    #coords { font-size: 10px; padding: 3px 6px; }
+    #legend { font-size: 10px; padding: 4px 6px; bottom: 6px; }
+  }
+
+  @media (max-width: 480px) {
+    :root {
+      --ruler-size: 16;
+      --toolbar-gap: 6px;
+      --toolbar-px: 8px;
+      --btn-size: 36px;
+    }
+    #toolbar input, #toolbar select { padding: 7px 8px; font-size: 14px; height: 36px; }
+    button { font-size: 16px; border-radius: 4px; }
+    #status { font-size: 11px; min-height: 20px; }
+    #goto-panel {
+      min-width: 0;
+      width: calc(100vw - 16px);
+      left: 8px !important;
+      top: auto !important;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+    #goto-panel .goto-row { gap: 8px; }
+    .goto-label input { font-size: 16px; }
+    .goto-actions button { flex: 1; min-height: 40px; }
+    #coords { font-size: 9px; padding: 2px 5px; }
+    #legend { font-size: 9px; line-height: 1.6; }
+    #legend div { white-space: nowrap; }
+  }
+
+  @media (max-width: 360px) {
+    :root {
+      --toolbar-px: 6px;
+      --toolbar-gap: 4px;
+    }
+    #toolbar input, #toolbar select { padding: 6px; font-size: 13px; height: 32px; }
+    button { min-width: 32px; height: 32px; font-size: 14px; }
+    #goto-panel { width: calc(100vw - 8px); left: 4px !important; }
+  }
 </style>
 </head>
 <body>
 
 <div id="toolbar">
-  <button id="theme-toggle" title="Toggle light / dark">☽</button>
+  <button id="theme-toggle" class="btn-icon" title="Toggle light / dark">☽</button>
+  <button id="biome-toggle" class="btn-icon" type="button" role="switch" aria-checked="true" title="Toggle Biome Overlay" style="color: var(--toggle-on); border-color: var(--toggle-on);">▩</button>
+  <button id="goto-btn" class="btn-icon" type="button" title="Pan to coordinates" aria-expanded="false">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+      <circle cx="7.5" cy="7.5" r="2.5"/><line x1="7.5" y1="1" x2="7.5" y2="4.5"/><line x1="7.5" y1="10.5" x2="7.5" y2="14"/><line x1="1" y1="7.5" x2="4.5" y2="7.5"/><line x1="10.5" y1="7.5" x2="14" y2="7.5"/>
+    </svg>
+  </button>
+  <button id="clear-selection" class="btn-icon" type="button" title="Clear selection" disabled>
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 6h18"></path>
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+    </svg>
+  </button>
   <label>Version
     <select id="ver">
       <option>26.20</option><option>1.21.60</option><option>1.21.50</option>
@@ -334,21 +287,6 @@
   <label>Pack Name
     <input id="pack-name" value="Fortress HSS Viewer">
   </label>
-  <button id="goto-btn" type="button" title="Pan to coordinates" aria-expanded="false">
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-      <circle cx="7.5" cy="7.5" r="2.5"/>
-      <line x1="7.5" y1="1"    x2="7.5" y2="4.5"/>
-      <line x1="7.5" y1="10.5" x2="7.5" y2="14"/>
-      <line x1="1"   y1="7.5"  x2="4.5" y2="7.5"/>
-      <line x1="10.5" y1="7.5" x2="14"  y2="7.5"/>
-    </svg>
-  </button>
-  <label>Selection
-    <button id="clear-selection" type="button" title="Clear selection" disabled><span id="clear-x">Clear </span><span id="selection-info">0</span></button>
-  </label>
-  <label>Biome View
-    <button id="biome-toggle" type="button" role="switch" aria-checked="false" title="Biome overlay"><span></span></button>
-  </label>
   <button id="download">Download</button>
 </div>
 
@@ -357,15 +295,11 @@
 <div id="main">
   <div id="goto-panel" hidden>
     <div class="goto-row">
-      <label class="goto-label">X
-        <input id="goto-x" type="number" placeholder="0" step="1">
-      </label>
-      <label class="goto-label">Z
-        <input id="goto-z" type="number" placeholder="0" step="1">
-      </label>
+      <label class="goto-label">X<input id="goto-x" type="number" placeholder="0" step="1"></label>
+      <label class="goto-label">Z<input id="goto-z" type="number" placeholder="0" step="1"></label>
     </div>
     <div class="goto-row goto-actions">
-      <button id="goto-paste" type="button" title="Paste from X Y Z format (e.g. -151.41 65.80 -15.56)">⧉ Paste XYZ</button>
+      <button id="goto-paste" type="button">⧉ Paste XYZ</button>
       <button id="goto-go" type="button">Go ↗</button>
     </div>
     <div id="goto-hint">Paste format: <em>x y z</em> — e.g. <code>-151.41 65.80 -15.56</code></div>

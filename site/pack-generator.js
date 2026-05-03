@@ -119,7 +119,8 @@ async function generateResourcePack(hssBoxes, name) {
   );
 
   const blob = await zip.generateAsync({
-    type: "blob"
+    type: "blob",
+    mimeType: "application/octet-stream"
   });
 
   const url = URL.createObjectURL(blob);

@@ -386,7 +386,7 @@ function draw() {
     const cy = H / 2 + (gz - panZ) * scale;
     if (cy < RULER + 5 || cy > H) continue;
     const worldZ = Math.round(gz + 0.5);
-    if (worldZ % labelStep === 0) ctx.fillText(`${worldZ}`, zRulerW - 4, cy);
+    if (worldZ % labelStep === 0) ctx.fillText(`${worldZ}`, zRulerW - 10, cy);
   }
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillText('X', zRulerW - fontSize - 2, 2);

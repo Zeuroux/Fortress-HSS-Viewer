@@ -5,6 +5,7 @@ const seedEl = document.getElementById('seed');
 const status = document.getElementById('status');
 const coords = document.getElementById('coords');
 const biomeToggle = document.getElementById('biome-toggle');
+const seeThroughToggle = document.getElementById('see-through-toggle');
 const clearSelectionBtn = document.getElementById('clear-selection');
 
 const CSS_PROPS = [
@@ -46,6 +47,7 @@ let biomeChunks = new Map();
 let selectedFortresses = new Map();
 let hoveredFortressId = null;
 let biomeOverlayEnabled = true;
+let boundingBoxesSeeThrough = localStorage.getItem('boundingBoxesSeeThrough') === 'true';
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 64;
@@ -873,7 +875,11 @@ seedEl.addEventListener('input', () => { resetWorldData(); scheduleUrlUpdate(); 
 verEl.addEventListener('change', resetWorldData);
 
 document.getElementById('download').addEventListener('click', () => {
-  generateResourcePack(hssBoxes, document.getElementById('pack-name').value.trim() || 'Fortress HSS');
+  generateResourcePack(
+    hssBoxes,
+    document.getElementById('pack-name').value.trim() || 'Fortress HSS',
+    { seeThrough: boundingBoxesSeeThrough }
+  );
 });
 
 biomeToggle.addEventListener('click', () => {
@@ -884,6 +890,21 @@ biomeToggle.addEventListener('click', () => {
   biomeToggle.style.borderColor = biomeOverlayEnabled ? 'var(--toggle-on)' : 'var(--btn-border)';
   if (biomeOverlayEnabled) scheduleBiomeFetch(); else cancelBiomeWorkerJobs();
   requestDraw();
+});
+
+function updateSeeThroughToggle() {
+  seeThroughToggle.setAttribute('aria-checked', String(boundingBoxesSeeThrough));
+  seeThroughToggle.title = boundingBoxesSeeThrough
+    ? 'Render bounding boxes through blocks'
+    : 'Render bounding boxes normally';
+  seeThroughToggle.style.color = boundingBoxesSeeThrough ? 'var(--toggle-on)' : 'var(--btn-text)';
+  seeThroughToggle.style.borderColor = boundingBoxesSeeThrough ? 'var(--toggle-on)' : 'var(--btn-border)';
+}
+
+seeThroughToggle.addEventListener('click', () => {
+  boundingBoxesSeeThrough = !boundingBoxesSeeThrough;
+  localStorage.setItem('boundingBoxesSeeThrough', String(boundingBoxesSeeThrough));
+  updateSeeThroughToggle();
 });
 
 clearSelectionBtn.addEventListener('click', clearSelection);
@@ -913,6 +934,7 @@ function scheduleUrlUpdate() {
 })();
 
 applyTheme(localStorage.getItem('theme') || 'dark');
+updateSeeThroughToggle();
 updateSelectionInfo();
 window.addEventListener('resize', resize);
 resize();

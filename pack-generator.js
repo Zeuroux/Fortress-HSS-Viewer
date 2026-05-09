@@ -85,6 +85,47 @@ function generateAnimation(anchor) {
   return JSON.stringify(animation);
 }
 
+function generateSeeThroughMaterial() {
+  const material = {
+    materials: {
+      version: "1.0.0",
+      "bounding_boxes_see_through:entity_alphatest": {
+        "+states": [
+          "DisableDepthTest",
+          "DisableDepthWrite",
+          "DisableCulling"
+        ]
+      }
+    }
+  };
+
+  return JSON.stringify(material);
+}
+
+async function fetchTemplate(filePath) {
+  const res = await fetch(filePath);
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch ${filePath}: ${res.status} ${res.statusText}`
+    );
+  }
+
+  return res;
+}
+
+async function generateArmorStandEntity(seeThrough) {
+  const res = await fetchTemplate("template/entity/armor_stand.entity.json");
+  const entity = await res.json();
+  const description = entity["minecraft:client_entity"].description;
+
+  description.materials.bounding_boxes = seeThrough
+    ? "bounding_boxes_see_through"
+    : "entity_alphatest";
+
+  return JSON.stringify(entity);
+}
+
 function generateGeometry(boxes, anchor) {
   const cubes = boxes.map(box => {
     const bounds = getBoxBounds(box);
@@ -160,10 +201,11 @@ function generateManifest(name, description) {
   return JSON.stringify(manifest);
 }
 
-async function generateResourcePack(hssBoxes, name) {
+async function generateResourcePack(hssBoxes, name, options = {}) {
   const description =
     `Resource pack for visualizing fortress HSS boxes using armor stands.\n` +
     `Place an armor stand anywhere near you and give it a blaze rod to show the HSS boxes.`;
+  const seeThrough = options.seeThrough === true;
 
   const anchor = computeGeometryAnchor(hssBoxes);
   const zip = new JSZip();
@@ -176,9 +218,15 @@ async function generateResourcePack(hssBoxes, name) {
     "animations/bounding_boxes.animation.json",
     generateAnimation(anchor)
   );
+  zip.file(
+    "entity/armor_stand.entity.json",
+    await generateArmorStandEntity(seeThrough)
+  );
+  if (seeThrough) {
+    zip.file("materials/entity.material", generateSeeThroughMaterial());
+  }
 
   const templateFiles = [
-    "template/entity/armor_stand.entity.json",
     "template/models/entity/armor_stand.larger_render.geo.json",
     "template/render_controllers/bounding_box.render.json",
     "template/textures/bounding_box.png"
@@ -186,14 +234,7 @@ async function generateResourcePack(hssBoxes, name) {
 
   await Promise.all(
     templateFiles.map(async (filePath) => {
-      const res = await fetch(filePath);
-
-      if (!res.ok) {
-        throw new Error(
-          `Failed to fetch ${filePath}: ${res.status} ${res.statusText}`
-        );
-      }
-
+      const res = await fetchTemplate(filePath);
       const content = await res.blob();
 
       zip.file(

@@ -1,23 +1,104 @@
-function generateGeometry(boxes) {
-  const cubes = boxes.map(box => {
-    const ox = Math.min(box.px, box.px + box.sx);
-    const oy = Math.min(box.py, box.py + box.sy);
-    const oz = -Math.max(box.pz, box.pz + box.sz);
+const MODEL_UNITS_PER_BLOCK = 16;
+const COORD_PRECISION = 3;
+const BLOCK_ALIGNMENT_OFFSET = 0.5;
 
-    const sx = Math.abs(box.sx);
-    const sy = Math.abs(box.sy);
-    const sz = Math.abs(box.sz);
+function cleanNumber(value) {
+  const rounded = parseFloat(value.toFixed(COORD_PRECISION));
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function formatMolangNumber(value) {
+  return String(cleanNumber(value));
+}
+
+function getBoxBounds(box) {
+  const sx = Math.abs(box.sx);
+  const sy = Math.abs(box.sy);
+  const sz = Math.abs(box.sz);
+
+  const minX = box.px - sx / 2 + BLOCK_ALIGNMENT_OFFSET;
+  const maxX = box.px + sx / 2 + BLOCK_ALIGNMENT_OFFSET;
+  const minY = Math.min(box.py, box.py + box.sy);
+  const maxY = Math.max(box.py, box.py + box.sy);
+  const minZ = box.pz - sz / 2 + BLOCK_ALIGNMENT_OFFSET;
+  const maxZ = box.pz + sz / 2 + BLOCK_ALIGNMENT_OFFSET;
+
+  return { minX, maxX, minY, maxY, minZ, maxZ, sx, sy, sz };
+}
+
+function computeGeometryAnchor(boxes) {
+  if (!boxes.length) {
+    return { x: 0, y: 0, z: 0 };
+  }
+
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+  for (const box of boxes) {
+    const bounds = getBoxBounds(box);
+    minX = Math.min(minX, bounds.minX);
+    minY = Math.min(minY, bounds.minY);
+    minZ = Math.min(minZ, bounds.minZ);
+    maxX = Math.max(maxX, bounds.maxX);
+    maxY = Math.max(maxY, bounds.maxY);
+    maxZ = Math.max(maxZ, bounds.maxZ);
+  }
+
+  return {
+    x: cleanNumber((minX + maxX) / 2),
+    y: cleanNumber((minY + maxY) / 2),
+    z: cleanNumber((minZ + maxZ) / 2)
+  };
+}
+
+function generateAnimation(anchor) {
+  const anchorX = formatMolangNumber(anchor.x);
+  const anchorY = formatMolangNumber(anchor.y);
+  const anchorZ = formatMolangNumber(anchor.z);
+  const entityXFromAnchor = `(query.position(0) - (${anchorX}))`;
+  const entityZFromAnchor = `(query.position(2) - (${anchorZ}))`;
+
+  const animation = {
+    format_version: "1.8.0",
+    animations: {
+      "animation.bounding_boxes": {
+        loop: true,
+        bones: {
+          root: {
+            scale: MODEL_UNITS_PER_BLOCK,
+            rotation: [
+              0,
+              "-query.body_y_rotation",
+              0
+            ],
+            position: [
+              `(-(${entityXFromAnchor} * math.cos(query.body_y_rotation)) - (${entityZFromAnchor} * math.sin(query.body_y_rotation))) * ${MODEL_UNITS_PER_BLOCK}`,
+              `((${anchorY}) - query.position(1)) * ${MODEL_UNITS_PER_BLOCK}`,
+              `((${entityZFromAnchor} * math.cos(query.body_y_rotation)) - (${entityXFromAnchor} * math.sin(query.body_y_rotation))) * ${MODEL_UNITS_PER_BLOCK}`
+            ]
+          }
+        }
+      }
+    }
+  };
+
+  return JSON.stringify(animation);
+}
+
+function generateGeometry(boxes, anchor) {
+  const cubes = boxes.map(box => {
+    const bounds = getBoxBounds(box);
 
     return {
       origin: [
-        parseFloat(ox.toFixed(1)), 
-        parseFloat(oy.toFixed(1)), 
-        parseFloat(oz.toFixed(1))
+        cleanNumber(bounds.minX - anchor.x),
+        cleanNumber(bounds.minY - anchor.y),
+        cleanNumber(anchor.z - bounds.maxZ)
       ],
       size: [
-        parseFloat(sx.toFixed(1)), 
-        parseFloat(sy.toFixed(1)), 
-        parseFloat(sz.toFixed(1))
+        cleanNumber(bounds.sx),
+        cleanNumber(bounds.sy),
+        cleanNumber(bounds.sz)
       ],
       uv: {
         north: { uv: [0, 0],  uv_size: [16, 16] },
@@ -84,15 +165,19 @@ async function generateResourcePack(hssBoxes, name) {
     `Resource pack for visualizing fortress HSS boxes using armor stands.\n` +
     `Place an armor stand anywhere near you and give it a blaze rod to show the HSS boxes.`;
 
+  const anchor = computeGeometryAnchor(hssBoxes);
   const zip = new JSZip();
   zip.file("manifest.json", generateManifest(name, description));
   zip.file(
     "models/entity/bounding_boxes.geo.json",
-    generateGeometry(hssBoxes)
+    generateGeometry(hssBoxes, anchor)
+  );
+  zip.file(
+    "animations/bounding_boxes.animation.json",
+    generateAnimation(anchor)
   );
 
   const templateFiles = [
-    "template/animations/bounding_boxes.animation.json",
     "template/entity/armor_stand.entity.json",
     "template/models/entity/armor_stand.larger_render.geo.json",
     "template/render_controllers/bounding_box.render.json",

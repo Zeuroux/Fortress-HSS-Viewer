@@ -1,6 +1,7 @@
 const MODEL_UNITS_PER_BLOCK = 16;
 const COORD_PRECISION = 3;
 const BLOCK_ALIGNMENT_OFFSET = 0.5;
+const BOX_RENDER_DISTANCE_BLOCKS = 256;
 
 function cleanNumber(value) {
   const rounded = parseFloat(value.toFixed(COORD_PRECISION));
@@ -24,6 +25,28 @@ function getBoxBounds(box) {
   const maxZ = box.pz + sz / 2 + BLOCK_ALIGNMENT_OFFSET;
 
   return { minX, maxX, minY, maxY, minZ, maxZ, sx, sy, sz };
+}
+
+function getBoxCenter(bounds) {
+  return {
+    x: cleanNumber((bounds.minX + bounds.maxX) / 2),
+    y: cleanNumber((bounds.minY + bounds.maxY) / 2),
+    z: cleanNumber((bounds.minZ + bounds.maxZ) / 2)
+  };
+}
+
+function getLocalBoxCenter(bounds, anchor) {
+  const center = getBoxCenter(bounds);
+
+  return [
+    cleanNumber(center.x - anchor.x),
+    cleanNumber(center.y - anchor.y),
+    cleanNumber(anchor.z - center.z)
+  ];
+}
+
+function getBoxBoneName(index) {
+  return `box_${index}`;
 }
 
 function computeGeometryAnchor(boxes) {
@@ -51,33 +74,51 @@ function computeGeometryAnchor(boxes) {
   };
 }
 
-function generateAnimation(anchor) {
+function generateBoxVisibilityExpression(center) {
+  const dx = `(query.position(0) - (${formatMolangNumber(center.x)}))`;
+  const dz = `(query.position(2) - (${formatMolangNumber(center.z)}))`;
+  const maxDistanceSq = formatMolangNumber(
+    BOX_RENDER_DISTANCE_BLOCKS * BOX_RENDER_DISTANCE_BLOCKS
+  );
+
+  return `((${dx} * ${dx}) + (${dz} * ${dz}) <= ${maxDistanceSq}) ? 1 : 0`;
+}
+
+function generateAnimation(anchor, boxes) {
   const anchorX = formatMolangNumber(anchor.x);
   const anchorY = formatMolangNumber(anchor.y);
   const anchorZ = formatMolangNumber(anchor.z);
   const entityXFromAnchor = `(query.position(0) - (${anchorX}))`;
   const entityZFromAnchor = `(query.position(2) - (${anchorZ}))`;
+  const bones = {
+    root: {
+      scale: MODEL_UNITS_PER_BLOCK,
+      rotation: [
+        0,
+        "-query.body_y_rotation",
+        0
+      ],
+      position: [
+        `(-(${entityXFromAnchor} * math.cos(query.body_y_rotation)) - (${entityZFromAnchor} * math.sin(query.body_y_rotation))) * ${MODEL_UNITS_PER_BLOCK}`,
+        `((${anchorY}) - query.position(1)) * ${MODEL_UNITS_PER_BLOCK}`,
+        `((${entityZFromAnchor} * math.cos(query.body_y_rotation)) - (${entityXFromAnchor} * math.sin(query.body_y_rotation))) * ${MODEL_UNITS_PER_BLOCK}`
+      ]
+    }
+  };
+
+  boxes.forEach((box, index) => {
+    const center = getBoxCenter(getBoxBounds(box));
+    bones[getBoxBoneName(index)] = {
+      scale: generateBoxVisibilityExpression(center)
+    };
+  });
 
   const animation = {
     format_version: "1.8.0",
     animations: {
       "animation.bounding_boxes": {
         loop: true,
-        bones: {
-          root: {
-            scale: MODEL_UNITS_PER_BLOCK,
-            rotation: [
-              0,
-              "-query.body_y_rotation",
-              0
-            ],
-            position: [
-              `(-(${entityXFromAnchor} * math.cos(query.body_y_rotation)) - (${entityZFromAnchor} * math.sin(query.body_y_rotation))) * ${MODEL_UNITS_PER_BLOCK}`,
-              `((${anchorY}) - query.position(1)) * ${MODEL_UNITS_PER_BLOCK}`,
-              `((${entityZFromAnchor} * math.cos(query.body_y_rotation)) - (${entityXFromAnchor} * math.sin(query.body_y_rotation))) * ${MODEL_UNITS_PER_BLOCK}`
-            ]
-          }
-        }
+        bones
       }
     }
   };
@@ -127,28 +168,35 @@ async function generateArmorStandEntity(seeThrough) {
 }
 
 function generateGeometry(boxes, anchor) {
-  const cubes = boxes.map(box => {
+  const boxBones = boxes.map((box, index) => {
     const bounds = getBoxBounds(box);
 
     return {
-      origin: [
-        cleanNumber(bounds.minX - anchor.x),
-        cleanNumber(bounds.minY - anchor.y),
-        cleanNumber(anchor.z - bounds.maxZ)
-      ],
-      size: [
-        cleanNumber(bounds.sx),
-        cleanNumber(bounds.sy),
-        cleanNumber(bounds.sz)
-      ],
-      uv: {
-        north: { uv: [0, 0],  uv_size: [16, 16] },
-        west:  { uv: [0, 0],  uv_size: [16, 16] },
-        up:    { uv: [0, 16], uv_size: [16, 16] },
-        down:  { uv: [0, 16], uv_size: [16, 16] },
-        south: { uv: [16, 32], uv_size: [-16, 16] },
-        east:  { uv: [0, 32], uv_size: [16, 16] }
-      }
+      name: getBoxBoneName(index),
+      parent: "root",
+      pivot: getLocalBoxCenter(bounds, anchor),
+      cubes: [
+        {
+          origin: [
+            cleanNumber(bounds.minX - anchor.x),
+            cleanNumber(bounds.minY - anchor.y),
+            cleanNumber(anchor.z - bounds.maxZ)
+          ],
+          size: [
+            cleanNumber(bounds.sx),
+            cleanNumber(bounds.sy),
+            cleanNumber(bounds.sz)
+          ],
+          uv: {
+            north: { uv: [0, 0],  uv_size: [16, 16] },
+            west:  { uv: [0, 0],  uv_size: [16, 16] },
+            up:    { uv: [0, 16], uv_size: [16, 16] },
+            down:  { uv: [0, 16], uv_size: [16, 16] },
+            south: { uv: [16, 32], uv_size: [-16, 16] },
+            east:  { uv: [0, 32], uv_size: [16, 16] }
+          }
+        }
+      ]
     };
   });
 
@@ -167,9 +215,9 @@ function generateGeometry(boxes, anchor) {
         bones: [
           {
             name: "root",
-            pivot: [0, 0, 0],
-            cubes: cubes
-          }
+            pivot: [0, 0, 0]
+          },
+          ...boxBones
         ]
       }
     ]
@@ -216,7 +264,7 @@ async function generateResourcePack(hssBoxes, name, options = {}) {
   );
   zip.file(
     "animations/bounding_boxes.animation.json",
-    generateAnimation(anchor)
+    generateAnimation(anchor, hssBoxes)
   );
   zip.file(
     "entity/armor_stand.entity.json",

@@ -129,9 +129,16 @@
   #viewport {
     flex: 1; position: relative; overflow: hidden; cursor: crosshair;
     touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
-  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  canvas {
+    display: block; width: 100%; height: 100%; image-rendering: pixelated;
+    -webkit-tap-highlight-color: transparent;
+  }
 
   #coords {
     position: absolute;

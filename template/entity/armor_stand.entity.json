@@ -4,7 +4,10 @@
     "description": {
       "identifier": "minecraft:armor_stand",
       "min_engine_version": "1.8.0",
-      "materials": { "bounding_boxes": "entity_alphatest" },
+      "materials": {
+        "bounding_boxes": "entity_alphatest",
+        "bounding_boxes_see_through": "bounding_boxes_see_through"
+      },
       "textures":  { "bounding_boxes": "textures/bounding_box" },
       "geometry": {
         "default":        "geometry.armor_stand.larger_render",
@@ -12,7 +15,8 @@
       },
       "scripts": {
         "pre_animation": [
-          "v.bounding_box_show = query.is_item_name_any('slot.weapon.mainhand', 0, 'minecraft:blaze_rod');",
+          "v.bounding_box_show = query.is_item_name_any('slot.weapon.mainhand', 0, 'minecraft:blaze_rod', 'minecraft:blaze_powder');",
+          "v.bounding_box_see_through = query.is_item_name_any('slot.weapon.mainhand', 0, 'minecraft:blaze_powder');",
           "v.bounding_box_yaw = 0 - query.body_y_rotation;"
         ],
         "animate": [

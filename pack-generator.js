@@ -155,14 +155,9 @@ async function fetchTemplate(filePath) {
   return res;
 }
 
-async function generateArmorStandEntity(seeThrough) {
+async function generateArmorStandEntity() {
   const res = await fetchTemplate("template/entity/armor_stand.entity.json");
   const entity = await res.json();
-  const description = entity["minecraft:client_entity"].description;
-
-  description.materials.bounding_boxes = seeThrough
-    ? "bounding_boxes_see_through"
-    : "entity_alphatest";
 
   return JSON.stringify(entity);
 }
@@ -249,11 +244,30 @@ function generateManifest(name, description) {
   return JSON.stringify(manifest);
 }
 
-async function generateResourcePack(hssBoxes, name, options = {}) {
-  const description =
-    `Resource pack for visualizing fortress HSS boxes using armor stands.\n` +
-    `Place an armor stand anywhere near you and give it a blaze rod to show the HSS boxes.`;
-  const seeThrough = options.seeThrough === true;
+function formatPackFortressList(selectedFortresses) {
+  if (!selectedFortresses.length) {
+    return "Selected fortress centers: none";
+  }
+
+  const fortressLines = selectedFortresses.map((fortress, index) => {
+    const centerX = Math.round(fortress.x);
+    const centerZ = Math.round(fortress.z);
+    return `${index + 1}. Center X ${centerX}, Z ${centerZ} (chunk ${fortress.chunkX}, ${fortress.chunkZ})`;
+  });
+
+  return `Selected fortress centers:\n${fortressLines.join("\n")}`;
+}
+
+function generatePackDescription(selectedFortresses) {
+  return [
+    "Resource pack for visualizing fortress HSS boxes using armor stands.",
+    "Instructions: place an armor stand near you, give it a blaze rod for normal HSS boxes, or blaze powder for see-through HSS boxes.",
+    formatPackFortressList(selectedFortresses)
+  ].join("\n");
+}
+
+async function generateResourcePack(hssBoxes, name, selectedFortresses = []) {
+  const description = generatePackDescription(selectedFortresses);
 
   const anchor = computeGeometryAnchor(hssBoxes);
   const zip = new JSZip();
@@ -268,11 +282,9 @@ async function generateResourcePack(hssBoxes, name, options = {}) {
   );
   zip.file(
     "entity/armor_stand.entity.json",
-    await generateArmorStandEntity(seeThrough)
+    await generateArmorStandEntity()
   );
-  if (seeThrough) {
-    zip.file("materials/entity.material", generateSeeThroughMaterial());
-  }
+  zip.file("materials/entity.material", generateSeeThroughMaterial());
 
   const templateFiles = [
     "template/models/entity/armor_stand.larger_render.geo.json",

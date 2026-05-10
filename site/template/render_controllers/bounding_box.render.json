@@ -2,8 +2,16 @@
   "format_version": "1.8.0",
   "render_controllers": {
     "controller.render.bounding_boxes": {
+      "arrays": {
+        "materials": {
+          "Array.bounding_box_materials": [
+            "Material.bounding_boxes",
+            "Material.bounding_boxes_see_through"
+          ]
+        }
+      },
       "geometry": "Geometry.bounding_boxes",
-      "materials": [ { "*": "Material.bounding_boxes" } ],
+      "materials": [ { "*": "Array.bounding_box_materials[v.bounding_box_see_through]" } ],
       "textures": [ "Texture.bounding_boxes" ],
       "ignore_lighting": true,
       "light_color_multiplier": 1.5
